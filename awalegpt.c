@@ -51,10 +51,9 @@ int afficherPlateau(Partie *partie) {
     printf("\n");
 
     printf("  Joueur 2 : %s, Score : %d\n\n", partie->joueur2.pseudo, partie->joueur2.score);
+    printf("  ---------------------------------\n");
     return 0;
 }
-
-
 
 int nombreGrainesRestantesJoueur(Partie *partie, int joueur) {
     int nbGraines = 0;
@@ -69,9 +68,9 @@ void capturerGraines(Partie *partie, int caseJouee, int joueur) {
     Plateau plateauTemp;
     memcpy(&plateauTemp, &(partie->plateau), sizeof(Plateau));
 
-    int i = (caseJouee + 1) % 12;
+    int i = caseJouee;
     while ((plateauTemp.cases[i].nbGraines == 2 || plateauTemp.cases[i].nbGraines == 3) &&
-           ((joueur == 1 && i < 6) || (joueur == 2 && i >= 6))) {
+           ((joueur == 1 && i >= 6) || (joueur == 2 && i < 6))) {
         nbGrainesPrises += plateauTemp.cases[i].nbGraines;
         plateauTemp.cases[i].nbGraines = 0;
         i = (i + 11) % 12; // Move backward
@@ -85,20 +84,27 @@ void capturerGraines(Partie *partie, int caseJouee, int joueur) {
 }
 
 int jouerCoup(Partie *partie, int caseJouee, int joueur) {
+    // Vérifie que le joueur joue bien dans son camp et que la case n'est pas vide
     if (partie->plateau.cases[caseJouee].nbGraines == 0 ||
-        (joueur == 1 && caseJouee >= 6) ||
-        (joueur == 2 && caseJouee < 6)) {
+        (joueur == 1 && (caseJouee < 0 || caseJouee >= 6)) ||
+        (joueur == 2 && (caseJouee < 6 || caseJouee >= 12))) {
         return 1; // Coup illégal
     }
 
     int nbGraines = partie->plateau.cases[caseJouee].nbGraines;
     partie->plateau.cases[caseJouee].nbGraines = 0;
 
-    for (int i = 1; i <= nbGraines; i++) {
-        partie->plateau.cases[(caseJouee + i) % 12].nbGraines++;
+    int index = caseJouee;
+    for (int i = 0; i < nbGraines; i++) {
+        index = (index + 1) % 12;
+        partie->plateau.cases[index].nbGraines++;
     }
 
-    capturerGraines(partie, (caseJouee + nbGraines) % 12, joueur);
+    // Vérifie que la capture ne se fait que dans le camp adverse
+    if ((joueur == 1 && index >= 6) || (joueur == 2 && index < 6)) {
+        capturerGraines(partie, index, joueur);
+    }
+
     return 0;
 }
 
@@ -125,7 +131,9 @@ int main() {
             partieEnCours = 0;
             break;
         }
-        if (jouerCoup(&partie, caseJouee - 1, joueur) == 0) {
+        // Ajuste l'index pour correspondre aux indices du tableau (0-11 au lieu de 1-12)
+        caseJouee -= 1;
+        if (jouerCoup(&partie, caseJouee, joueur) == 0) {
             if (verifierFinPartie(&partie)) {
                 partieEnCours = 0;
                 printf("\nFin de la partie !\n");
