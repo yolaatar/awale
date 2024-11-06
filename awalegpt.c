@@ -26,7 +26,7 @@ int initialiserPartie(Partie *partie) {
         partie->plateau.cases[i].nbGraines = 4;
     }
     snprintf(partie->joueur1.pseudo, sizeof(partie->joueur1.pseudo), "Chaouki");
-    snprintf(partie->joueur2.pseudo, sizeof(partie->joueur2.pseudo), "Yola Atar");
+    snprintf(partie->joueur2.pseudo, sizeof(partie->joueur2.pseudo), "Yolaatar");
 
     partie->joueur1.score = 0;
     partie->joueur2.score = 0;
@@ -123,7 +123,7 @@ int main() {
     while (partieEnCours) {
         afficherPlateau(&partie);
         int joueur = tour % 2 == 1 ? 1 : 2;
-        printf("Tour du joueur %d (%s). Choisissez une case à jouer (1-6 pour J1, 7-12 pour J2): ", joueur, joueur == 1 ? partie.joueur1.pseudo : partie.joueur2.pseudo);
+        printf("Tour %d, joueur %d (%s). Choisissez une case à jouer (1-6 pour J1, 7-12 pour J2): ",tour, joueur, joueur == 1 ? partie.joueur1.pseudo : partie.joueur2.pseudo);
         scanf("%d", &caseJouee);
 
         //condition pour terminer la partie dans le terminal 
