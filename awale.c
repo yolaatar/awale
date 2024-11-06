@@ -1,312 +1,271 @@
 #include <stdio.h>
 #include <string.h>
-// Définition des structures
+
 typedef struct {
-  int nbGraines;
+    int nbGraines;
 } Case;
 
 typedef struct {
-  Case cases[12];
+    Case cases[12];
 } Plateau;
 
 typedef struct {
-  char pseudo[20];
-  int score;
+    char pseudo[20];
+    int score;
 } Joueur;
 
 typedef struct {
-  Plateau plateau;
-  Joueur joueur1;
-  Joueur joueur2;
-  Plateau historique[100];
+    Plateau plateau;
+    Joueur joueur1;
+    Joueur joueur2;
+    Plateau historique[100];
 } Partie;
 
 int initialiserPartie(Partie *partie) {
-  int i;
-  for (i = 0; i < 12; i++) {
-    partie->plateau.cases[i].nbGraines = 4;
-  }
-  // Initialisation des joueurs
-  snprintf(partie->joueur1.pseudo, sizeof(partie->joueur1.pseudo), "Chaouki");
-  snprintf(partie->joueur2.pseudo, sizeof(partie->joueur2.pseudo), "yolaatar");
+    /*for (int i = 0; i < 12; i++) {
+        partie->plateau.cases[i].nbGraines = 2;
+    }*/
 
-  partie->joueur1.score = 0;
-  partie->joueur2.score = 0;
-  return 0;
+    Plateau plateauTest = {
+    .cases = {{0}, {0}, {0}, {0}, {0}, {1}, {1}, {0}, {2}, {0}, {1}, {0}}
+    };
+    partie->plateau = plateauTest;
+
+    snprintf(partie->joueur1.pseudo, sizeof(partie->joueur1.pseudo), "Chaouki");
+    snprintf(partie->joueur2.pseudo, sizeof(partie->joueur2.pseudo), "Yolaatar");
+
+    partie->joueur1.score = 0;
+    partie->joueur2.score = 0;
+    return 0;
 }
 
 int afficherPlateau(Partie *partie) {
-  int i;
-  printf("\n");
-  printf("Joueur 1 : %s\n", partie->joueur1.pseudo);
-  for (i = 0; i < 12; i++) {
-    if (i >= 6) {
-      printf("%d ", partie->plateau.cases[17 - i].nbGraines);
-      continue;
+    printf("\n  Joueur 1 : %s, Score : %d\n", partie->joueur1.pseudo, partie->joueur1.score);
+
+    // Affichage de la ligne supérieure (cases 0 à 5 pour Joueur 1)
+    printf("   ");
+    for (int i = 0; i < 6; i++) {
+        printf("%2d ", partie->plateau.cases[i].nbGraines); // Affiche les cases de gauche à droite
     }
-    printf("%d ", partie->plateau.cases[i].nbGraines);
-    if (i == 5) {
-      printf("\n");
+    printf("\n");
+
+    // Affichage de la ligne inférieure (cases 11 à 6 pour Joueur 2)
+    printf("   ");
+    for (int i = 11; i >= 6; i--) {
+        printf("%2d ", partie->plateau.cases[i].nbGraines); // Affiche les cases de droite à gauche
     }
-  }
-  printf("\n");
-  printf("Joueur 2 : %s\n", partie->joueur2.pseudo);
-  printf("\n");
-  return 0;
+    printf("\n");
+
+    printf("  Joueur 2 : %s, Score : %d\n\n", partie->joueur2.pseudo, partie->joueur2.score);
+    printf("  ---------------------------------\n");
+    return 0;
 }
 
 int nombreGrainesRestantesJoueur(Partie *partie, int joueur) {
-  int i;
-  int nbGraines = 0;
-  for (i = 0 + (joueur - 1)*6; i < 12 - (2 - joueur)*6 ; i++) {
-    nbGraines += partie->plateau.cases[i].nbGraines;
-  }
-  return nbGraines;
+    int nbGraines = 0;
+    for (int i = (joueur - 1) * 6; i < joueur * 6; i++) {
+        nbGraines += partie->plateau.cases[i].nbGraines;
+    }
+    return nbGraines;
 }
 
-// fonction pour jouer un coup
-int jouerCoup(Partie *partie, int caseJouee) {
-  //Copie du plateau pour pouvoir annuler un coup si il est illégal
-  Plateau plateau;
-  Joueur joueurUn, joueurDeux;
-  memcpy(&plateau, &(partie->plateau), sizeof(Plateau));
-  //On récup le nombre de graines
-  int nbGraines = partie->plateau.cases[caseJouee].nbGraines;
-  plateau.cases[caseJouee].nbGraines = 0;
-  int i = 0;
-  //On distribue les graines avec la condition que si on repasse sur la même case on ne met pas de graines
-  //On ne met pas de graines dans la case de départ
-  while (nbGraines) {
-    if ((caseJouee + i) % 12 == caseJouee) {
-      i++;
-      continue;
-    }
-    plateau.cases[(caseJouee + i) % 12].nbGraines++;
-    nbGraines--;
-    i++;
-  }
-  i--;
-  //On vérifie si on a pris des graines
-  Plateau plateauTemp;
-  memcpy(&plateauTemp, &plateau, sizeof(Plateau));
-  //Si c'est joueur 2 qui joue
-  if (caseJouee > 5 && plateauTemp.cases[(caseJouee + i) % 12].nbGraines == 2 || plateauTemp.cases[(caseJouee + i) % 12].nbGraines == 3) {
-      int nbGrainesAdversaire = nombreGrainesRestantesJoueur(partie, 1)  ;
-      int nbGrainesPrises = 0;
-      int j = 0;
-      //Tant qu'on peut prendre des graines on les prend
-      while(plateauTemp.cases[(caseJouee + i - j) % 12].nbGraines == 2 || plateauTemp.cases[(caseJouee + i - j) % 12].nbGraines == 3) {
-          nbGrainesPrises += plateauTemp.cases[(caseJouee + i - j) % 12].nbGraines;
-          plateauTemp.cases[(caseJouee + i - j) % 12].nbGraines = 0;
-          j++;
-      }
-      //Si on prend toutes les graines de l'autre joueur on ne prend pas les graines
-      if (nbGrainesPrises == nbGrainesAdversaire) {
-          //On ne prend pas les graines
-          joueurUn.score += nbGrainesPrises;
-      }
-      //Sinon on prend les graines
-      else {
-          //On prend les graines
-          joueurUn.score += nbGrainesPrises;
-          memcpy(&(partie->plateau), &plateauTemp, sizeof(Plateau));
-      }
-  }
-    //Si c'est joueur 1 qui joue
-    if (caseJouee < 6 && plateauTemp.cases[(caseJouee + i) % 12].nbGraines == 2 || plateauTemp.cases[(caseJouee + i) % 12].nbGraines == 3) {
-        int nbGrainesAdversaire = nombreGrainesRestantesJoueur(partie, 2)  ;
-        int nbGrainesPrises = 0;
-        int j = 0;
-        //Tant qu'on peut prendre des graines on les prend
-        while(plateauTemp.cases[(caseJouee + i - j) % 12].nbGraines == 2 || plateauTemp.cases[(caseJouee + i - j) % 12].nbGraines == 3) {
-            nbGrainesPrises += plateauTemp.cases[(caseJouee + i - j) % 12].nbGraines;
-            plateauTemp.cases[(caseJouee + i - j) % 12].nbGraines = 0;
-            j++;
-        }
-        //Si on prend toutes les graines de l'autre joueur on ne prend pas les graines
-        if (nbGrainesPrises == nbGrainesAdversaire) {
-            //On ne prend pas les graines
-            joueurDeux.score += nbGrainesPrises;
-        }
-        //Sinon on prend les graines
-        else {
-            //On prend les graines
-            joueurDeux.score += nbGrainesPrises;
-            memcpy(&(partie->plateau), &plateauTemp, sizeof(Plateau));
-        }
-    }
-    //on vérifie que le coup nourrit l'adversaire si celui est affamé
-    if (caseJouee > 5) {
-        for (int j = 6; j < 12; j++) {
-            if (plateauTemp.cases[j].nbGraines > 0) {
-                break;
-            }
-            if (j == 11) {
-                //le coup est illégal on annule le coup
-                return 1;
+int peutNourrirAdversaire(Partie *partie, int joueurAffame) {
+    int adversaire = (joueurAffame == 1) ? 2 : 1;
+    int debutAdversaire = (adversaire - 1) * 6;
+    int finAdversaire = adversaire * 6;
+    int debutJoueurAffame = (joueurAffame - 1) * 6;
+    int finJoueurAffame = joueurAffame * 6;
+
+    // Parcourt chaque case de l'adversaire pour voir si un coup peut nourrir le joueur affamé
+    for (int i = debutAdversaire; i < finAdversaire; i++) {
+        int nbGraines = partie->plateau.cases[i].nbGraines;
+        if (nbGraines > 0) {
+            // Simule la distribution des graines
+            for (int j = 1; j <= nbGraines; j++) {
+                int position = (i + j) % 12;
+                // Vérifie si une graine tombe dans le camp du joueur affamé
+                if (position >= debutJoueurAffame && position < finJoueurAffame) {
+                    return 1; // L'adversaire peut nourrir le joueur affamé
+                }
             }
         }
     }
-    else {
-        for (int j = 0; j < 6; j++) {
-            if (plateauTemp.cases[j].nbGraines > 0) {
-                break;
-            }
-            if (j == 5) {
-                //Le coup est illégal on annule le coup
-                return 1;
-            }
-        }
-    }
-    //On met à jour le plateau
-    memcpy(&(partie->plateau), &plateau, sizeof(Plateau));
-    //On met à jour le score
-    if (caseJouee < 6) {
-        partie->joueur1.score += nombreGrainesRestantesJoueur(partie, 1);
-    }
-    else {
-        partie->joueur2.score += nombreGrainesRestantesJoueur(partie, 2);
-    }
-  return 0;
+    return 0; // L'adversaire ne peut pas nourrir le joueur affamé
 }
 
 
-// fonction pour jouer un coup
-int simulerCoup(Partie *partie, int caseJouee) {
-  //Copie du plateau pour pouvoir annuler un coup si il est illégal
-  Plateau plateau;
-  Joueur joueurUn, joueurDeux;
-  memcpy(&plateau, &(partie->plateau), sizeof(Plateau));
-  //On récup le nombre de graines
-  int nbGraines = partie->plateau.cases[caseJouee].nbGraines;
-  plateau.cases[caseJouee].nbGraines = 0;
-  int i = 0;
-  //On distribue les graines avec la condition que si on repasse sur la même case on ne met pas de graines
-  //On ne met pas de graines dans la case de départ
-  while (nbGraines) {
-    if ((caseJouee + i) % 12 == caseJouee) {
-      i++;
-      continue;
+
+
+// Vérifie si un coup donné nourrit l'adversaire
+int coupNourritAdversaire(Partie *partie, int caseJouee, int joueur) {
+    int nbGraines = partie->plateau.cases[caseJouee].nbGraines;
+    int index = caseJouee;
+
+    for (int i = 0; i < nbGraines; i++) {
+        index = (index + 1) % 12;
     }
-    plateau.cases[(caseJouee + i) % 12].nbGraines++;
-    nbGraines--;
-    i++;
-  }
-  i--;
-  //On vérifie si on a pris des graines
-  Plateau plateauTemp;
-  memcpy(&plateauTemp, &plateau, sizeof(Plateau));
-  //Si c'est joueur 2 qui joue
-  if (caseJouee > 5 && plateauTemp.cases[(caseJouee + i) % 12].nbGraines == 2 || plateauTemp.cases[(caseJouee + i) % 12].nbGraines == 3) {
-      int nbGrainesAdversaire = nombreGrainesRestantesJoueur(partie, 1)  ;
-      int nbGrainesPrises = 0;
-      int j = 0;
-      //Tant qu'on peut prendre des graines on les prend
-      while(plateauTemp.cases[(caseJouee + i - j) % 12].nbGraines == 2 || plateauTemp.cases[(caseJouee + i - j) % 12].nbGraines == 3) {
-          nbGrainesPrises += plateauTemp.cases[(caseJouee + i - j) % 12].nbGraines;
-          plateauTemp.cases[(caseJouee + i - j) % 12].nbGraines = 0;
-          j++;
-      }
-      //Si on prend toutes les graines de l'autre joueur on ne prend pas les graines
-      if (nbGrainesPrises == nbGrainesAdversaire) {
-          //On ne prend pas les graines
-          joueurUn.score += nbGrainesPrises;
-      }
-      //Sinon on prend les graines
-      else {
-          //On prend les graines
-          joueurUn.score += nbGrainesPrises;
-          memcpy(&(partie->plateau), &plateauTemp, sizeof(Plateau));
-      }
-  }
-    //Si c'est joueur 1 qui joue
-    if (caseJouee < 6 && plateauTemp.cases[(caseJouee + i) % 12].nbGraines == 2 || plateauTemp.cases[(caseJouee + i) % 12].nbGraines == 3) {
-        int nbGrainesAdversaire = nombreGrainesRestantesJoueur(partie, 2)  ;
-        int nbGrainesPrises = 0;
-        int j = 0;
-        //Tant qu'on peut prendre des graines on les prend
-        while(plateauTemp.cases[(caseJouee + i - j) % 12].nbGraines == 2 || plateauTemp.cases[(caseJouee + i - j) % 12].nbGraines == 3) {
-            nbGrainesPrises += plateauTemp.cases[(caseJouee + i - j) % 12].nbGraines;
-            plateauTemp.cases[(caseJouee + i - j) % 12].nbGraines = 0;
-            j++;
-        }
-        //Si on prend toutes les graines de l'autre joueur on ne prend pas les graines
-        if (nbGrainesPrises == nbGrainesAdversaire) {
-            //On ne prend pas les graines
-            joueurDeux.score += nbGrainesPrises;
-        }
-        //Sinon on prend les graines
-        else {
-            //On prend les graines
-            joueurDeux.score += nbGrainesPrises;
-            //memcpy(&(partie->plateau), &plateauTemp, sizeof(Plateau));
-        }
+
+    int adversaire = (joueur == 1) ? 2 : 1;
+    if ((adversaire == 1 && index < 6) || (adversaire == 2 && index >= 6)) {
+        return 1; // Le coup nourrit l'adversaire
     }
-    //on vérifie que le coup nourrit l'adversaire si celui est affamé
-    if (caseJouee > 5) {
-        for (int j = 6; j < 12; j++) {
-            if (plateauTemp.cases[j].nbGraines > 0) {
-                break;
-            }
-            if (j == 11) {
-                //le coup est illégal on annule le coup
-                return 1;
-            }
-        }
-    }
-    else {
-        for (int j = 0; j < 6; j++) {
-            if (plateauTemp.cases[j].nbGraines > 0) {
-                break;
-            }
-            if (j == 5) {
-                //Le coup est illégal on annule le coup
-                return 1;
-            }
-        }
-    }
-    //On met à jour le plateau
-    memcpy(&(partie->plateau), &plateau, sizeof(Plateau));
-    //On met à jour le score
-    if (caseJouee < 6) {
-        //partie->joueur1.score += nombreGrainesRestantesJoueur(partie, 1);
-    }
-    else {
-        //partie->joueur2.score += nombreGrainesRestantesJoueur(partie, 2);
-    }
-  return 0;
+
+    return 0; // Le coup ne nourrit pas l'adversaire
 }
 
-int main(int argc, char **argv) {
-  // test affichage du plateau
-  Partie partie;
-  int partieEnCours = 1;
-  int tour = 1;
-  initialiserPartie(&partie);
-  afficherPlateau(&partie);
-  while(partieEnCours) {
-      //On vérifie qu'aucun joueur n'a gagné
-      //1 : On vérifie le score
-      if (partie.joueur1.score > 25 || partie.joueur2.score > 25) {
-          partieEnCours = 0;
-          break;
-      }
-      //2 : On vérifie qu'il existe un coup pour nourrir l'adversaire 
-      for (int i = 0; i < 6; i++) {
-          if (partie.plateau.cases[i].nbGraines > 0) {
-              break;
-          }
-          if (i == 5) {
-              partieEnCours = 0;
-              break;
-          }
-      }
+void capturerGraines(Partie *partie, int caseJouee, int joueur) {
+    int nbGrainesPrises = 0;
+    Plateau plateauTemp;
+    memcpy(&plateauTemp, &(partie->plateau), sizeof(Plateau));
 
-  }
-  return 0;
+    int i = caseJouee;
+    while ((plateauTemp.cases[i].nbGraines == 2 || plateauTemp.cases[i].nbGraines == 3) &&
+           ((joueur == 1 && i >= 6) || (joueur == 2 && i < 6))) {
+        nbGrainesPrises += plateauTemp.cases[i].nbGraines;
+        plateauTemp.cases[i].nbGraines = 0;
+        i = (i + 11) % 12; // Move backward
+    }
+
+    if (nbGrainesPrises < nombreGrainesRestantesJoueur(partie, 3 - joueur)) {
+        if (joueur == 1) partie->joueur1.score += nbGrainesPrises;
+        else partie->joueur2.score += nbGrainesPrises;
+        memcpy(&(partie->plateau), &plateauTemp, sizeof(Plateau));
+    }
 }
 
-//A faire : finir la condition de personne peut jouer (créer la fonction mirroir de simulation)
-//         finir la condition de joueur affamé impossible à nourrir
-//        faire la distribution des graines dans ces cas là
-//       Gérer le jeu a tour de role + gérer l'input correct selon le joueur qui joue
+int jouerCoup(Partie *partie, int caseJouee, int joueur) {
+    int adversaire = (joueur == 1) ? 2 : 1;
+
+    // Vérifie que le joueur joue bien dans son camp et que la case n'est pas vide
+    if (partie->plateau.cases[caseJouee].nbGraines == 0 ||
+        (joueur == 1 && (caseJouee < 0 || caseJouee >= 6)) ||
+        (joueur == 2 && (caseJouee < 6 || caseJouee >= 12))) {
+        return 1; // Coup illégal
+    }
+
+    // Si l'adversaire est en famine, le coup doit le nourrir
+    if (nombreGrainesRestantesJoueur(partie, adversaire) == 0 && !coupNourritAdversaire(partie, caseJouee, joueur)) {
+        return 1; // Coup illégal car il ne nourrit pas l'adversaire en famine
+    }
+
+    int nbGraines = partie->plateau.cases[caseJouee].nbGraines;
+    partie->plateau.cases[caseJouee].nbGraines = 0;
+
+    int index = caseJouee;
+    for (int i = 0; i < nbGraines; i++) {
+        index = (index + 1) % 12;
+        partie->plateau.cases[index].nbGraines++;
+    }
+
+    // Vérifie que la capture ne se fait que dans le camp adverse
+    if ((joueur == 1 && index >= 6) || (joueur == 2 && index < 6)) {
+        capturerGraines(partie, index, joueur);
+    }
+
+    return 0;
+}
+
+int peutForcerCapture(Partie *partie, int joueur) {
+    int debutJoueur = (joueur - 1) * 6;
+    int finJoueur = joueur * 6;
+    int debutAdversaire = (joueur == 1) ? 6 : 0;
+    int finAdversaire = (joueur == 1) ? 12 : 6;
+
+    // Parcourt toutes les cases du joueur
+    for (int i = debutJoueur; i < finJoueur; i++) {
+        int nbGraines = partie->plateau.cases[i].nbGraines;
+        if (nbGraines > 0) {
+            // Simule la distribution des graines
+            for (int j = 1; j <= nbGraines; j++) {
+                int position = (i + j) % 12;
+                // Vérifie si la dernière graine tombe dans une case de l'adversaire contenant 2 ou 3 graines
+                if (position >= debutAdversaire && position < finAdversaire &&
+                    j == nbGraines && // La dernière graine
+                    (partie->plateau.cases[position].nbGraines == 2 || partie->plateau.cases[position].nbGraines == 3)) {
+                    return 1; // Le joueur peut forcer une capture
+                }
+            }
+        }
+    }
+    return 0; // Aucun coup ne permet de forcer une capture
+}
+
+
+
+int verifierFinPartie(Partie *partie) {
+    // Vérifie si un joueur a plus de 24 points, ce qui signifie qu'il a gagné
+    if (partie->joueur1.score > 24 || partie->joueur2.score > 24) {
+        return 1;
+    }
+
+    // Vérifie si l'un des joueurs est en famine et si l'adversaire peut le nourrir
+    if (nombreGrainesRestantesJoueur(partie, 1) == 0) {
+        if (!peutNourrirAdversaire(partie, 1)) {
+            //On distribue les graines restantes au joueur qui joue 
+            for (int i = 6; i < 12; i++) {
+                partie->joueur2.score += partie->plateau.cases[i].nbGraines;
+                partie->plateau.cases[i].nbGraines = 0;
+            }
+            return 1; // Le joueur 1 est en famine et ne peut pas être nourri
+        }
+    } else if (nombreGrainesRestantesJoueur(partie, 2) == 0) {
+        if (!peutNourrirAdversaire(partie, 2)) {
+            //On distribue les graines restantes au joueur qui joue
+            for (int i = 0; i < 6; i++) {
+                partie->joueur1.score += partie->plateau.cases[i].nbGraines;
+                partie->plateau.cases[i].nbGraines = 0;
+            }
+            return 1; // Le joueur 2 est en famine et ne peut pas être nourri
+        }
+    }
+
+    // Vérifie si aucun joueur ne peut forcer une capture
+    if (!peutForcerCapture(partie, 1) && !peutForcerCapture(partie, 2)) {
+        return 1; // Aucun joueur ne peut forcer une capture, la partie se termine
+    }
+
+    return 0; // La partie peut continuer
+}
+
+int main() {
+    Partie partie;
+    int partieEnCours = 1, tour = 1, caseJouee;
+
+    initialiserPartie(&partie);
+
+    while (partieEnCours) {
+        afficherPlateau(&partie);
+        int joueur = tour % 2 == 1 ? 1 : 2;
+        printf("Tour %d, joueur %d (%s). Choisissez une case à jouer (1-6 pour J1, 7-12 pour J2): ", tour, joueur, joueur == 1 ? partie.joueur1.pseudo : partie.joueur2.pseudo);
+        scanf("%d", &caseJouee);
+
+        //condition pour terminer la partie dans le terminal 
+        if (caseJouee == -1) {
+            printf("Partie annulée.\n");
+            partieEnCours = 0;
+            break;
+        }
+        // Ajuste l'index pour correspondre aux indices du tableau (0-11 au lieu de 1-12)
+        caseJouee -= 1;
+        if (jouerCoup(&partie, caseJouee, joueur) == 0) {
+            if (verifierFinPartie(&partie)) {
+                partieEnCours = 0;
+                printf("\nFin de la partie !\n");
+                afficherPlateau(&partie);
+                if (partie.joueur1.score > partie.joueur2.score) printf("Le gagnant est %s !\n", partie.joueur1.pseudo);
+                else if (partie.joueur1.score < partie.joueur2.score) printf("Le gagnant est %s !\n", partie.joueur2.pseudo);
+                else printf("Match nul !\n");
+            }
+            tour++;
+        } else {
+            //On vérifie si l'adversaire est en famine
+            if(joueur == 1 && nombreGrainesRestantesJoueur(&partie, 2) == 0) {
+                printf("Le joueur 2 est en famine, vous devez le nourrir.\n");
+            } else if(joueur == 2 && nombreGrainesRestantesJoueur(&partie, 1) == 0) {
+                printf("Le joueur 1 est en famine, vous devez le nourrir.\n");
+            } else
+            printf("Coup illégal, essayez encore.\n");
+        }
+    }
+    return 0;
+}
