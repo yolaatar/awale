@@ -2,6 +2,9 @@
 #ifndef AWALE_H
 #define AWALE_H
 
+#include <stdio.h>
+
+// Définition de constantes
 #define BUF_SIZE 1024
 
 // Structures du jeu Awale
@@ -25,10 +28,15 @@ typedef struct {
     Plateau historique[100];
 } Partie;
 
-// Fonctions du jeu Awale
-void initialiserPartie(Partie *partie);
+// Déclarations de fonctions
+int initialiserPartie(Partie *partie);
+int afficherPlateau(Partie *partie);
+int nombreGrainesRestantesJoueur(Partie *partie, int joueur);
+int peutNourrirAdversaire(Partie *partie, int joueurAffame);
+int coupNourritAdversaire(Partie *partie, int caseJouee, int joueur);
+void capturerGraines(Partie *partie, int caseJouee, int joueur);
 int jouerCoup(Partie *partie, int caseJouee, int joueur);
-void afficherPlateau(Partie *partie);
+int peutForcerCapture(Partie *partie, int joueur);
 int verifierFinPartie(Partie *partie);
 
 #endif // AWALE_H
