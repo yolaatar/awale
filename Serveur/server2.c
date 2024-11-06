@@ -5,6 +5,8 @@
 
 #include "server2.h"
 #include "client2.h"
+#include "awale.h"  
+#define MAX_CLIENTS 2 
 
 static void init(void)
 {
@@ -25,12 +27,18 @@ static void end(void)
    WSACleanup();
 #endif
 }
+// Check la convo chatgpt pour récupérer le fonctionnement du jeu, on ne gère pour l'instant que une partie a la fois
+// on veut pouvoir faire plusieurs parties en meme temps, finir d'implémenter awale sur le server 
+// commencer par tester une partie d'awale a la fois joué par deux clients qui se connectent 
 
 static void app(void)
 {
    SOCKET sock = init_connection();
    char buffer[BUF_SIZE];
    /* the index for the array */
+   fd_set rdfs;
+   Partie partie;
+   Client clients[MAX_CLIENTS];
    int actual = 0;
    int max = sock;
    /* an array for all clients */
