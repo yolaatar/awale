@@ -41,10 +41,7 @@ static void app(void)
    Client clients[MAX_CLIENTS];
    int actual = 0;
    int max = sock;
-   /* an array for all clients */
-   Client clients[MAX_CLIENTS];
-
-   fd_set rdfs;
+   
 
    while(1)
    {
