@@ -63,6 +63,24 @@ void envoyer_plateau_aux_clients(Client *clients, int actual, Partie *partie) {
     }
 }
 
+// Fonction pour envoyer un message à tous les clients
+static void send_message_to_all_clients(Client *clients, int actual, const char *buffer, char from_server, const char *sender_name)
+{
+    char message[BUF_SIZE];
+    for(int i = 0; i < actual; i++)
+    {
+        // Préparer le message à envoyer
+        message[0] = 0;
+        if(from_server == 0 && sender_name != NULL)
+        {
+            strncpy(message, sender_name, BUF_SIZE - 1); // Inclure le nom de l'expéditeur
+            strncat(message, " : ", sizeof(message) - strlen(message) - 1);
+        }
+        strncat(message, buffer, sizeof(message) - strlen(message) - 1);
+        write_client(clients[i].sock, message);
+    }
+}
+
 static void app(void)
 {
     SOCKET sock = init_connection();
@@ -78,17 +96,11 @@ static void app(void)
 
     while(1)
     {
-        int i = 0;
         FD_ZERO(&rdfs);
-
-        // Ajouter STDIN_FILENO
         FD_SET(STDIN_FILENO, &rdfs);
-
-        // Ajouter le socket de connexion
         FD_SET(sock, &rdfs);
 
-        // Ajouter le socket de chaque client
-        for(i = 0; i < actual; i++)
+        for(int i = 0; i < actual; i++)
         {
             FD_SET(clients[i].sock, &rdfs);
         }
@@ -108,7 +120,7 @@ static void app(void)
         {
             // Nouveau client
             SOCKADDR_IN csin = { 0 };
-            size_t sinsize = sizeof csin;
+            socklen_t sinsize = sizeof csin;
             int csock = accept(sock, (SOCKADDR *)&csin, &sinsize);
             if(csock == SOCKET_ERROR)
             {
@@ -133,14 +145,14 @@ static void app(void)
             // Lancer la partie quand il y a deux joueurs connectés
             if (actual == MAX_CLIENTS) {
                 partieEnCours = 1;
-                send_message_to_all_clients(clients, clients[0], actual, "La partie commence!\n", 1);
+                send_message_to_all_clients(clients, actual, "La partie commence!\n", 1, NULL);
                 envoyer_plateau_aux_clients(clients, actual, &partie);  // Afficher le plateau initial
             }
         }
         else if (partieEnCours)
         {
             // Gérer les tours de jeu
-            for(i = 0; i < actual; i++)
+            for(int i = 0; i < actual; i++)
             {
                 if(FD_ISSET(clients[i].sock, &rdfs))
                 {
@@ -164,7 +176,7 @@ static void app(void)
                             if (verifierFinPartie(&partie)) {
                                 partieEnCours = 0;
                                 snprintf(buffer, BUF_SIZE, "\nFin de la partie !\n");
-                                send_message_to_all_clients(clients, client, actual, buffer, 1);
+                                send_message_to_all_clients(clients, actual, buffer, 1, NULL);
 
                                 // Annonce du gagnant
                                 if (partie.joueur1.score > partie.joueur2.score) {
@@ -174,12 +186,12 @@ static void app(void)
                                 } else {
                                     snprintf(buffer, BUF_SIZE, "Match nul !\n");
                                 }
-                                send_message_to_all_clients(clients, client, actual, buffer, 1);
+                                send_message_to_all_clients(clients, actual, buffer, 1, NULL);
                                 clear_clients(clients, actual);
                                 break;
                             } else {
                                 snprintf(buffer, BUF_SIZE, "Coup joué par %s.\n", client.name);
-                                send_message_to_all_clients(clients, client, actual, buffer, 0);
+                                send_message_to_all_clients(clients, actual, buffer, 0, client.name);
                             }
                         } else {
                             snprintf(buffer, BUF_SIZE, "Coup illégal, essayez encore.\n");
@@ -207,25 +219,6 @@ static void remove_client(Client *clients, int to_remove, int *actual)
 {
     memmove(clients + to_remove, clients + to_remove + 1, (*actual - to_remove - 1) * sizeof(Client));
     (*actual)--;
-}
-
-static void send_message_to_all_clients(Client *clients, Client sender, int actual, const char *buffer, char from_server)
-{
-    char message[BUF_SIZE];
-    message[0] = 0;
-    for(int i = 0; i < actual; i++)
-    {
-        if(sender.sock != clients[i].sock)
-        {
-            if(from_server == 0)
-            {
-                strncpy(message, sender.name, BUF_SIZE - 1);
-                strncat(message, " : ", sizeof message - strlen(message) - 1);
-            }
-            strncat(message, buffer, sizeof message - strlen(message) - 1);
-            write_client(clients[i].sock, message);
-        }
-    }
 }
 
 static int init_connection(void)
