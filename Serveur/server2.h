@@ -6,7 +6,7 @@
 #include <winsock2.h>
 #include <sys/select.h>
 
-#elif defined (linux)
+#elif defined (linux) || defined(__APPLE__)
 
 #include <sys/types.h>
 #include <sys/select.h>
