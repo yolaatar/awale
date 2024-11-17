@@ -1,48 +1,12 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
-#include "server2.h"
-#include "client2.h"
-#include "awale.h"
-
-#define BUF_SIZE 1024
-#define MAX_CLIENTS 100
-#define MAX_SALONS 50
-
-// Déclaration anticipée de Utilisateur
-typedef struct Utilisateur Utilisateur;
-
-typedef struct {
-    Utilisateur *joueur1;
-    Utilisateur *joueur2;
-    Partie partie;
-    int tourActuel;              // 0 pour joueur1, 1 pour joueur2
-    int statut;                  // 0 pour attente, 1 pour en cours, 2 pour terminé
-} Salon;
-
-struct Utilisateur {
-    SOCKET sock;
-    int id; 
-    char pseudo[20];
-    char username[50];
-    char password[50];
-    int estEnJeu;                // 1 si en jeu, 0 sinon
-    Salon *partieEnCours;       // NULL si le joueur n'est pas en jeu
-    Joueur *joueur;              // Pointeur vers le joueur (Joueur1 ou Joueur2) dans une partie
-    Utilisateur *challenger;
-};
-
-
-
-
-int ajouter_ligne_fichier(const char *username, const char *filename, const char *line) {
+int ajouter_ligne_fichier(const char *username, const char *filename, const char *line)
+{
     char filepath[150];
-    snprintf(filepath, sizeof(filepath), "players/%s/%s", username, filename);
+    snprintf(filepath, sizeof(filepath), "Serveur/players/%s/%s", username, filename);
 
     FILE *file = fopen(filepath, "a");
-    if (!file) {
-        perror("Erreur lors de l'ouverture du fichier");
+    if (!file)
+    {
+        perror("Erreur lors de l'ouverture du fichier pour ajout");
         return 0;
     }
 
@@ -51,61 +15,88 @@ int ajouter_ligne_fichier(const char *username, const char *filename, const char
     return 1;
 }
 
-void lire_relations(const char *username, const char *prefix, char *output, size_t output_size) {
-    char filename[150];
-    printf("%s\n",username);
-    snprintf(filename, sizeof(filename), "%s", username);
-
-    // Débogage : Afficher le chemin complet du fichier
-    printf("Débogage : Chemin du fichier friends = %s\n", filename);
-
-    // Vérifier si le fichier existe
-    if (access(filename, F_OK) != 0) {
-        printf("Erreur : Le fichier %s n'existe pas.\n", filename);
-        perror("Erreur détectée");
+void traiter_addfriend(Utilisateur *utilisateur, const char *target_username)
+{
+    // Prevent adding oneself as a friend
+    if (strcmp(utilisateur->username, target_username) == 0)
+    {
+        write_client(utilisateur->sock, "Erreur : Vous ne pouvez pas vous ajouter en ami vous-même.\n");
         return;
     }
 
-    // Vérifier si le fichier est accessible en lecture
-    if (access(filename, R_OK) != 0) {
-        printf("Erreur : Le fichier %s n'est pas accessible en lecture.\n", filename);
-        perror("Erreur détectée");
+    // Check if target user exists in the users file
+    FILE *file = fopen("Serveur/utilisateurs.txt", "r");
+    if (file == NULL)
+    {
+        write_client(utilisateur->sock, "Erreur : Impossible d'accéder aux informations utilisateur.\n");
         return;
     }
 
-    // Essayer d'ouvrir le fichier
-    FILE *file = fopen(filename, "r");
-    if (!file) {
-        perror("Erreur lors de l'ouverture du fichier friends");
-        return;
-    }
-
-    // Lire le fichier ligne par ligne
     char line[256];
-    output[0] = '\0'; // Initialiser la chaîne de sortie à une chaîne vide
-    while (fgets(line, sizeof(line), file)) {
-        if (strncmp(line, prefix, strlen(prefix)) == 0) {
-            strncat(output, line + strlen(prefix), output_size - strlen(output) - 1);
+    int user_found = 0;
+
+    while (fgets(line, sizeof(line), file))
+    {
+        char id[10], username[50], password[50];
+        sscanf(line, "%[^,],%[^,],%[^,]", id, username, password);
+
+        if (strcmp(username, target_username) == 0)
+        {
+            user_found = 1;
+
+            // Prepare the friend request
+            char friends_file[150];
+            snprintf(friends_file, sizeof(friends_file), "Serveur/players/%s/friends", target_username);
+
+            FILE *friends = fopen(friends_file, "a");
+            if (friends == NULL)
+            {
+                write_client(utilisateur->sock, "Erreur : Impossible d'envoyer la demande d'ami.\n");
+                fclose(file);
+                return;
+            }
+
+            // Write the friend request to the target user's friends file
+            fprintf(friends, "request:%s\n", utilisateur->username);
+            fclose(friends);
+
+            // Notify the user about the successful friend request
+            char msg[150];
+            snprintf(msg, sizeof(msg), "Demande d'ami envoyée à %s.\n", target_username);
+            write_client(utilisateur->sock, msg);
+            // Notify the target user about the friend request
+            Utilisateur *adversaire = trouverUtilisateurParUsername(target_username);
+            snprintf(msg, sizeof(msg), "Vous avez reçu une demande d'ami de %s.\n", utilisateur->username);
+            write_client(adversaire->sock, msg);
+            break;
         }
     }
 
-    // Fermer le fichier
     fclose(file);
+
+    if (!user_found)
+    {
+        write_client(utilisateur->sock, "Erreur : Utilisateur introuvable.\n");
+    }
 }
 
-
-int supprimer_ligne_fichier(const char *username, const char *filename, const char *line_to_remove) {
+int supprimer_ligne_fichier(const char *username, const char *filename, const char *line_to_remove)
+{
     char filepath[150];
-    snprintf(filepath, sizeof(filepath), "players/%s/%s", username, filename);
+    snprintf(filepath, sizeof(filepath), "Serveur/players/%s/%s", username, filename);
 
     FILE *file = fopen(filepath, "r");
-    if (!file) {
-        perror("Erreur lors de l'ouverture du fichier");
+    if (!file)
+    {
+        char msg[150];
+        snprintf(msg, sizeof(msg), "Erreur lors de l'ouverture du fichier pour suppression %s", filepath);
+        perror(msg);
         return 0;
     }
 
     FILE *temp = fopen("temp.txt", "w");
-    if (!temp) {
+    if (!temp)
+    {
         perror("Erreur lors de la création du fichier temporaire");
         fclose(file);
         return 0;
@@ -114,10 +105,14 @@ int supprimer_ligne_fichier(const char *username, const char *filename, const ch
     char line[256];
     int line_removed = 0;
 
-    while (fgets(line, sizeof(line), file)) {
-        if (strncmp(line, line_to_remove, strlen(line_to_remove)) != 0) {
+    while (fgets(line, sizeof(line), file))
+    {
+        if (strncmp(line, line_to_remove, strlen(line_to_remove)) != 0)
+        {
             fputs(line, temp);
-        } else {
+        }
+        else
+        {
             line_removed = 1;
         }
     }
@@ -131,217 +126,63 @@ int supprimer_ligne_fichier(const char *username, const char *filename, const ch
     return line_removed;
 }
 
-// Fonction pour vérifier les identifiants dans le fichier
-int verifier_identifiants(const char *username, const char *password)
+void traiter_faccept(Utilisateur *utilisateur, const char *friend_username)
 {
-    FILE *file = fopen("utilisateurs.txt", "r");
-    if (file == NULL)
-    {
-        perror("Erreur lors de l'ouverture du fichier utilisateurs.txt");
-        return 0;
-    }
+    // Path to the current user's friend file
+    char friend_file[150];
+    snprintf(friend_file, sizeof(friend_file), "Serveur/players/%s/friends", utilisateur->username);
 
-    char line[150];
-    Utilisateur user;
+    // Construct the line to remove from the user's friend file
+    char line_to_remove[150];
+    snprintf(line_to_remove, sizeof(line_to_remove), "request:%s", friend_username);
 
-    // Lire chaque ligne du fichier
-    while (fgets(line, sizeof(line), file))
+    // Remove the friend request from the user's file
+    if (supprimer_ligne_fichier(utilisateur->username, "friends", line_to_remove))
     {
-        sscanf(line, "%d,%49[^,],%49s", &user.id, user.username, user.password);
-        if (strcmp(user.username, username) == 0 && strcmp(user.password, password) == 0)
+        char line_to_add[150];
+        snprintf(line_to_add, sizeof(line_to_add), "friend:%s", friend_username);
+
+        // Add the friend entry to the user's friend file
+        ajouter_ligne_fichier(utilisateur->username, "friends", line_to_add);
+
+        // Add the friend entry to the target user's friend file
+        snprintf(line_to_add, sizeof(line_to_add), "friend:%s", utilisateur->username);
+        ajouter_ligne_fichier(friend_username, "friends", line_to_add);
+
+        write_client(utilisateur->sock, "Demande d'ami acceptée.\n");
+
+        // Notify the friend if they are online
+        Utilisateur *friend_user = trouverUtilisateurParUsername(friend_username);
+        if (friend_user != NULL)
         {
-            fclose(file);
-            return 1; // Authentification réussie
+            char msg[150];
+            snprintf(msg, sizeof(msg), "%s a accepté votre demande d'ami.\n", utilisateur->username);
+            write_client(friend_user->sock, msg);
         }
     }
-
-    fclose(file);
-    return 0; // Authentification échouée
-}
-
-// Fonction pour ajouter un utilisateur dans le fichier
-int ajouter_utilisateur(const char *username, const char *password) {
-    if (verifier_identifiants(username, password)) {
-        return 0; // L'utilisateur existe déjà
-    }
-
-    FILE *file = fopen("utilisateurs.txt", "a");
-    if (!file) {
-        perror("Erreur lors de l'ouverture du fichier utilisateurs.txt");
-        return -1;
-    }
-
-    int new_id = 0;
-    FILE *file_read = fopen("utilisateurs.txt", "r");
-    if (file_read) {
-        char line[150];
-        Utilisateur user;
-        while (fgets(line, sizeof(line), file_read)) {
-            sscanf(line, "%d,%49[^,],%49s", &user.id, user.username, user.password);
-            if (user.id > new_id) {
-                new_id = user.id;
-            }
-        }
-        fclose(file_read);
-    }
-
-    fprintf(file, "%d,%s,%s\n", new_id + 1, username, password);
-    fclose(file);
-
-    // Création du répertoire principal 'players'
-    char base_dir[] = "players";
-
-#ifdef _WIN32
-    mkdir(base_dir);
-#else
-    mkdir(base_dir, 0777);
-#endif
-
-    // Création du sous-dossier de l'utilisateur
-    char user_dir[150];
-    snprintf(user_dir, sizeof(user_dir), "%s/%s", base_dir, username);
-
-#ifdef _WIN32
-    if (mkdir(user_dir) != 0) {
-        perror("Erreur lors de la création du dossier utilisateur");
-        return -1;
-    }
-#else
-    if (mkdir(user_dir, 0777) != 0) {
-        perror("Erreur lors de la création du dossier utilisateur");
-        return -1;
-    }
-#endif
-
-    char bio_file[150], friends_file[150];
-    snprintf(bio_file, sizeof(bio_file), "%s/bio", user_dir);
-    snprintf(friends_file, sizeof(friends_file), "%s/friends", user_dir);
-
-    FILE *bio = fopen(bio_file, "w");
-    if (bio) fclose(bio);
-
-    FILE *friends = fopen(friends_file, "w");
-    if (friends) fclose(friends);
-
-    return 1; // Inscription réussie
-}
-
-int est_deja_connecte(const char *username)
-{
-    for (int i = 0; i < MAX_CLIENTS; i++)
+    else
     {
-        if (connected_users[i].is_connected && strcmp(connected_users[i].username, username) == 0)
-        {
-            return 1; // L'utilisateur est déjà connecté
-        }
-    }
-    return 0; // L'utilisateur n'est pas connecté
-}
-
-// Ajoute un utilisateur à la liste des connectés
-void ajouter_utilisateur_connecte(const char *username)
-{
-    for (int i = 0; i < MAX_CONNECTED_USERS; i++)
-    {
-        if (!connected_users[i].is_connected) // Trouver un emplacement libre
-        {
-            strncpy(connected_users[i].username, username, sizeof(connected_users[i].username) - 1);
-            connected_users[i].is_connected = 1;
-            return;
-        }
+        write_client(utilisateur->sock, "Aucune demande d'ami trouvée de cet utilisateur.\n");
     }
 }
 
-// Supprime un utilisateur de la liste des connectés
-void supprimer_utilisateur_connecte(const char *username)
-{
-    for (int i = 0; i < MAX_CONNECTED_USERS; i++)
-    {
-        if (connected_users[i].is_connected && strcmp(connected_users[i].username, username) == 0)
-        {
-            connected_users[i].is_connected = 0;
-            memset(connected_users[i].username, 0, sizeof(connected_users[i].username));
-            return;
+void traiter_fdecline(Utilisateur *utilisateur, const char *friend_username) {
+    // Construct the line to remove from the user's friend file
+    char line_to_remove[150];
+    snprintf(line_to_remove, sizeof(line_to_remove), "request:%s", friend_username);
+
+    // Attempt to remove the friend request
+    if (supprimer_ligne_fichier(utilisateur->username, "friends", line_to_remove)) {
+        write_client(utilisateur->sock, "Demande d'ami refusée.\n");
+
+        // Notify the friend if they are online
+        Utilisateur *friend_user = trouverUtilisateurParUsername(friend_username);
+        if (friend_user != NULL) {
+            char msg[150];
+            snprintf(msg, sizeof(msg), "%s a refusé votre demande d'ami :(.\n", utilisateur->username);
+            write_client(friend_user->sock, msg);
         }
+    } else {
+        write_client(utilisateur->sock, "Aucune demande d'ami trouvée de cet utilisateur.\n");
     }
-}
-
-int enregistrer_bio(const char *username, const char *bio) {
-    char filename[150];
-    snprintf(filename, sizeof(filename), "players/%s/bio", username);
-
-    FILE *file = fopen(filename, "w");
-    if (!file) {
-        perror("Erreur lors de l'ouverture du fichier bio");
-        return 0;
-    }
-
-    fprintf(file, "%s", bio);
-    fclose(file);
-    return 1;
-}
-
-int lire_bio(const char *username, char *buffer, size_t buffer_size) {
-    char filename[150];
-    snprintf(filename, sizeof(filename), "players/%s/bio", username);
-
-    FILE *file = fopen(filename, "r");
-    if (!file) {
-        return 0; // Si le fichier n'existe pas ou erreur
-    }
-
-    fread(buffer, 1, buffer_size - 1, file);
-    fclose(file);
-    buffer[buffer_size - 1] = '\0'; // Assurer la terminaison
-    return 1;
-}
-
-int ajouter_bio(const char *username, const char *bio)
-{
-    FILE *file = fopen("utilisateurs.txt", "r+");
-    if (file == NULL)
-    {
-        perror("Erreur lors de l'ouverture du fichier utilisateurs.txt");
-        return 0;
-    }
-
-    // Créer un fichier temporaire pour mettre à jour les données
-    FILE *temp = fopen("utilisateurs_temp.txt", "w");
-    if (temp == NULL)
-    {
-        perror("Erreur lors de la création du fichier temporaire");
-        fclose(file);
-        return 0;
-    }
-
-    char line[256];
-    char updated_line[512];
-    int bio_added = 0;
-
-    while (fgets(line, sizeof(line), file))
-    {
-        char id[10], user[50], pass[50];
-        sscanf(line, "%[^,],%[^,],%[^,\n]", id, user, pass);
-
-        if (strcmp(user, username) == 0)
-        {
-            // Ajouter la bio à l'utilisateur
-            snprintf(updated_line, sizeof(updated_line), "%s,%s,%s,%s\n", id, user, pass, bio);
-            fputs(updated_line, temp);
-            bio_added = 1;
-        }
-        else
-        {
-            fputs(line, temp); // Copier les autres lignes telles quelles
-        }
-    }
-
-    fclose(file);
-    fclose(temp);
-
-    // Remplacer l'ancien fichier par le nouveau
-    remove("utilisateurs.txt");
-    rename("utilisateurs_temp.txt", "utilisateurs.txt");
-
-    return bio_added;
 }
