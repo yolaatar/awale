@@ -1,5 +1,0 @@
-1,yolaatar,abc
-2,yolaatar,a
-3,mehdi,a
-4,djalil,a
-5,momo,a

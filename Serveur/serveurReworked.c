@@ -71,6 +71,7 @@ void initialiserUtilisateurs(void)
         utilisateurs[i].estEnJeu = 0;
         utilisateurs[i].partieEnCours = NULL;
         utilisateurs[i].joueur = NULL;
+        utilisateurs[i].isConnected = 0;
     }
 }
 
@@ -109,6 +110,8 @@ void envoyer_plateau_aux_users(Utilisateur *joueur1, Utilisateur *joueur2, Parti
     char buffer[BUF_SIZE];
 
     // Préparation de l'affichage du plateau
+
+    printf("Pseudo : %s\n",partie->joueur1.pseudo );
 
     strncat(buffer, "  ---------------------------------\n", BUF_SIZE - strlen(buffer) - 1);
     snprintf(buffer, BUF_SIZE, "\n  Joueur 1 : %s, Score : %d\n",
@@ -152,6 +155,7 @@ void creerSalon(Utilisateur *joueur1, Utilisateur *joueur2)
         return;
     }
 
+
     Salon *salon = &salons[nbSalons++];
     salon->joueur1 = joueur1;
     strcpy(salon->partie.joueur1.pseudo, joueur1->username);
@@ -159,6 +163,10 @@ void creerSalon(Utilisateur *joueur1, Utilisateur *joueur2)
     strcpy(salon->partie.joueur2.pseudo, joueur2->username);
     salon->tourActuel = 0;
     salon->statut = 1;
+
+    printf("blablablab1 : %s\n",salon->partie.joueur1.pseudo);
+    printf("blablablab2 : %s\n",salon->partie.joueur2.pseudo);
+
 
     initialiserPartie(&salon->partie);
     joueur1->estEnJeu = 1;
@@ -178,7 +186,7 @@ Utilisateur *trouverUtilisateurParUsername(const char *username)
             return &utilisateurs[i];
         }
     }
-    return NULL;
+    return NULL; // Aucun utilisateur trouvé
 }
 
 void terminerPartie(Salon *salon)
@@ -263,6 +271,7 @@ int verifier_identifiants(const char *username, const char *password)
     while (fgets(line, sizeof(line), file))
     {
         sscanf(line, "%d,%49[^,],%49s", &user.id, user.username, user.password);
+
         if (strcmp(user.username, username) == 0 && strcmp(user.password, password) == 0)
         {
             fclose(file);
@@ -296,7 +305,7 @@ void traiter_login(Utilisateur *utilisateur, const char *username, const char *p
     }
     if (verifier_identifiants(username, password))
     {
-        ajouter_utilisateur_connecte(username);
+        utilisateur->isConnected = 1; // Marque l'utilisateur comme connecté
         strncpy(utilisateur->username, username, sizeof(utilisateur->username) - 1);
         write_client(utilisateur->sock, "Connexion réussie !\n");
         char buffer[BUF_SIZE] = {0};
@@ -309,9 +318,37 @@ void traiter_login(Utilisateur *utilisateur, const char *username, const char *p
     }
 }
 
+int verifier_username(const char *username)
+{
+    FILE *file = fopen("Serveur/utilisateurs.txt", "r");
+    if (file == NULL)
+    {
+        perror("Erreur lors de l'ouverture du fichier utilisateurs.txt");
+        return 0;
+    }
+
+    char line[150];
+    Utilisateur user;
+
+    // Lire chaque ligne du fichier
+    while (fgets(line, sizeof(line), file))
+    {
+        sscanf(line, "%d,%49[^,],%49s", &user.id, user.username, user.password);
+
+        if (strcmp(user.username, username) == 0)
+        {
+            fclose(file);
+            return 1; // username dejà présent
+        }
+    }
+
+    fclose(file);
+    return 0; // Authentification échouée
+}
+
 int ajouter_utilisateur(const char *username, const char *password)
 {
-    if (verifier_identifiants(username, password))
+    if (verifier_username(username))
     {
         return 0; // L'utilisateur existe déjà
     }
@@ -422,13 +459,18 @@ void supprimer_utilisateur_connecte(const char *username)
 void traiter_logout(Utilisateur *utilisateur)
 {
     printf("Utilisateur %s s'est déconnecté.\n", utilisateur->username);
-    // on recupére le socket de l'utilisateur
-    SOCKET sock = utilisateur->sock;
-    supprimer_utilisateur_connecte(utilisateur->username);
-    write_client(sock, "Vous avez été déconnecté. Au revoir !\n");
-    end_connection(sock);
+
+    // Réinitialiser l'état de connexion
+    utilisateur->isConnected = 0;
+    memset(utilisateur->username, 0, sizeof(utilisateur->username));
+    memset(utilisateur->pseudo, 0, sizeof(utilisateur->pseudo));
+
+    // Envoyer un message d'au revoir au client
+    write_client(utilisateur->sock, "Vous avez été déconnecté. Au revoir !\n");
+
+    // Fermer la connexion proprement
+    closesocket(utilisateur->sock);
     utilisateur->sock = INVALID_SOCKET;
-    sock = INVALID_SOCKET;
 }
 
 int ajouter_ligne_fichier(const char *username, const char *filename, const char *line)
@@ -599,157 +641,187 @@ void traiter_faccept(Utilisateur *utilisateur, const char *friend_username)
     }
 }
 
-void traiter_fdecline(Utilisateur *utilisateur, const char *friend_username) {
+void traiter_fdecline(Utilisateur *utilisateur, const char *friend_username)
+{
     // Construct the line to remove from the user's friend file
     char line_to_remove[150];
     snprintf(line_to_remove, sizeof(line_to_remove), "request:%s", friend_username);
 
     // Attempt to remove the friend request
-    if (supprimer_ligne_fichier(utilisateur->username, "friends", line_to_remove)) {
+    if (supprimer_ligne_fichier(utilisateur->username, "friends", line_to_remove))
+    {
         write_client(utilisateur->sock, "Demande d'ami refusée.\n");
 
         // Notify the friend if they are online
         Utilisateur *friend_user = trouverUtilisateurParUsername(friend_username);
-        if (friend_user != NULL) {
+        if (friend_user != NULL)
+        {
             char msg[150];
             snprintf(msg, sizeof(msg), "%s a refusé votre demande d'ami :(.\n", utilisateur->username);
             write_client(friend_user->sock, msg);
         }
-    } else {
+    }
+    else
+    {
         write_client(utilisateur->sock, "Aucune demande d'ami trouvée de cet utilisateur.\n");
     }
 }
 
-
 void traiterMessage(Utilisateur *utilisateur, char *message)
 {
-    if (strncmp(message, "/challenge ", 11) == 0)
-    {
-        char *username = message + 11;
-        Utilisateur *adversaire = trouverUtilisateurParUsername(username);
-        if (adversaire != NULL && adversaire->estEnJeu == 0)
+    
+
+    if (utilisateur->isConnected){
+        if (strncmp(message, "/challenge ", 11) == 0)
         {
-            adversaire->challenger = utilisateur; // Set pending challenge
-            write_client(adversaire->sock, "Vous avez reçu un défi ! Tapez /accept pour accepter ou /decline pour refuser.\n");
-            write_client(utilisateur->sock, "Défi envoyé ! En attente de réponse.\n");
+            char *username = message + 11;
+            Utilisateur *adversaire = trouverUtilisateurParUsername(username);
+            if (adversaire != NULL && adversaire->estEnJeu == 0)
+            {
+                adversaire->challenger = utilisateur; // Set pending challenge
+                write_client(adversaire->sock, "Vous avez reçu un défi ! Tapez /accept pour accepter ou /decline pour refuser.\n");
+                write_client(utilisateur->sock, "Défi envoyé ! En attente de réponse.\n");
+            }
+            else
+            {
+
+                write_client(utilisateur->sock, "Joueur non disponible.\n");
+            }
+        }
+        else if (strcmp(message, "/accept") == 0 && utilisateur->challenger)
+        {
+            Utilisateur *challenger = utilisateur->challenger;
+            creerSalon(challenger, utilisateur); // Create game if challenge is accepted
+            utilisateur->challenger = NULL;      // Clear challenge
+            challenger->challenger = NULL;
+        }
+        else if (strcmp(message, "/decline") == 0 && utilisateur->challenger)
+        {
+            write_client(utilisateur->challenger->sock, "Défi refusé.\n");
+            write_client(utilisateur->sock, "Défi refusé.\n");
+            utilisateur->challenger = NULL; // Clear challenge
+        }
+        else if (strncmp(message, "/play ", 6) == 0 && utilisateur->estEnJeu)
+        {
+            int caseJouee = atoi(message + 6) - 1;
+            Salon *salon = utilisateur->partieEnCours;
+            playCoup(salon, utilisateur, caseJouee);
+        }
+        else if (strcmp(message, "/list") == 0)
+        {
+            char buffer[BUF_SIZE] = "Joueurs en ligne :\n";
+            for (int i = 0; i < nbUtilisateursConnectes; i++)
+            {
+                strncat(buffer, utilisateurs[i].username, BUF_SIZE - strlen(buffer) - 1);
+                strncat(buffer, "\n", BUF_SIZE - strlen(buffer) - 1);
+            }
+            write_client(utilisateur->sock, buffer);
+        }
+        else if (strcmp(message, "/help") == 0)
+        {
+            envoyerAide(utilisateur);
+        }
+        else if (strncmp(message, "/login ", 7) == 0)
+        {
+            write_client(utilisateur->sock, "Vous devez être déconnecté pour utiliser cette commande !\n");
+        }
+        else if (strncmp(message, "/signin ", 8) == 0)
+        {
+            write_client(utilisateur->sock, "Vous devez être déconnecté pour utiliser cette commande !\n");
+        }
+        else if (strcmp(message, "/logout") == 0)
+        {
+            traiter_logout(utilisateur);
+        }
+        else if (strncmp(message, "/bio ", 5) == 0)
+        {
+            // Bio functionality
+            // Retrieve or save bio based on input
+        }
+        else if (strncmp(message, "/addfriend ", 11) == 0)
+        {
+            char target_username[50];
+            if (sscanf(message + 11, "%49s", target_username) == 1)
+            {
+                traiter_addfriend(utilisateur, target_username);
+            }
+            else
+            {
+                write_client(utilisateur->sock, "Format incorrect. Utilisez : /addfriend [username]\n");
+            }
+        }
+        else if (strcmp(message, "/friends") == 0)
+        {
+            // Show friend list functionality
+        }
+        else if (strncmp(message, "/faccept ", 9) == 0)
+        {
+            char friend_username[50];
+            if (sscanf(message + 9, "%49s", friend_username) == 1)
+            {
+                traiter_faccept(utilisateur, friend_username);
+            }
+            else
+            {
+                write_client(utilisateur->sock, "Format incorrect. Utilisez : /faccept [username]\n");
+            }
+        }
+        else if (strncmp(message, "/fdecline ", 9) == 0)
+        {
+            char friend_username[50];
+            if (sscanf(message + 9, "%49s", friend_username) == 1)
+            {
+                traiter_fdecline(utilisateur, friend_username);
+            }
+            else
+            {
+                write_client(utilisateur->sock, "Format incorrect. Utilisez : /fdecline [username]\n");
+            }
+        }
+        else if (strcmp(message, "/private") == 0){
+            // MODE PRIVÉ
+        }
+        else if (strcmp(message, "/public") == 0){
+            // MODE PUBLIC
         }
         else
         {
-            write_client(utilisateur->sock, "Joueur non disponible.\n");
+            envoyerMessagePublic(utilisateur, message);
         }
     }
-    else if (strcmp(message, "/accept") == 0 && utilisateur->challenger)
-    {
-        Utilisateur *challenger = utilisateur->challenger;
-        creerSalon(challenger, utilisateur); // Create game if challenge is accepted
-        utilisateur->challenger = NULL;      // Clear challenge
-        challenger->challenger = NULL;
-    }
-    else if (strcmp(message, "/decline") == 0 && utilisateur->challenger)
-    {
-        write_client(utilisateur->challenger->sock, "Défi refusé.\n");
-        write_client(utilisateur->sock, "Défi refusé.\n");
-        utilisateur->challenger = NULL; // Clear challenge
-    }
-    else if (strncmp(message, "/play ", 6) == 0 && utilisateur->estEnJeu)
-    {
-        int caseJouee = atoi(message + 6) - 1;
-        Salon *salon = utilisateur->partieEnCours;
-        playCoup(salon, utilisateur, caseJouee);
-    }
-    else if (strcmp(message, "/list") == 0)
-    {
-        char buffer[BUF_SIZE] = "Joueurs en ligne :\n";
-        for (int i = 0; i < nbUtilisateursConnectes; i++)
+    else if (!utilisateur->isConnected){
+        if (strncmp(message, "/login ", 7) == 0)
         {
-            strncat(buffer, utilisateurs[i].username, BUF_SIZE - strlen(buffer) - 1);
-            strncat(buffer, "\n", BUF_SIZE - strlen(buffer) - 1);
+            char username[50], password[50];
+            if (sscanf(message + 7, "%49s %49s", username, password) == 2)
+            {
+                traiter_login(utilisateur, username, password);
+            }
+            else
+            {
+                write_client(utilisateur->sock, "Format incorrect. Utilisez : /login [username] [password]\n");
+            }
         }
-        write_client(utilisateur->sock, buffer);
-    }
-    else if (strcmp(message, "/help") == 0)
-    {
-        envoyerAide(utilisateur);
-    }
-    else if (strncmp(message, "/login ", 7) == 0)
-    {
-        char username[50], password[50];
-        if (sscanf(message + 7, "%49s %49s", username, password) == 2)
+        else if (strncmp(message, "/signin ", 8) == 0)
         {
-            traiter_login(utilisateur, username, password);
+            char username[50], password[50];
+            if (sscanf(message + 8, "%49s %49s", username, password) == 2)
+            {
+                traiter_signin(utilisateur, username, password);
+            }
+            else
+            {
+                write_client(utilisateur->sock, "Format incorrect. Utilisez : /signin [username] [password]\n");
+            }
         }
-        else
-        {
-            write_client(utilisateur->sock, "Format incorrect. Utilisez : /login [username] [password]\n");
+        else{
+            char buffer[BUF_SIZE] = {0};
+            snprintf(buffer, BUF_SIZE, "%s\n", utilisateur->isConnected);
+            write_client(utilisateur->sock, buffer);
+            write_client(utilisateur->sock, "Vous devez être connecté pour utiliser cette commande !\n");
         }
-    }
-    else if (strncmp(message, "/signin ", 8) == 0)
-    {
-        char username[50], password[50];
-        if (sscanf(message + 8, "%49s %49s", username, password) == 2)
-        {
-            traiter_signin(utilisateur, username, password);
-        }
-        else
-        {
-            write_client(utilisateur->sock, "Format incorrect. Utilisez : /signin [username] [password]\n");
-        }
-    }
-    else if (strcmp(message, "/logout") == 0)
-    {
-        traiter_logout(utilisateur);
-    }
-    else if (strncmp(message, "/bio", 4) == 0)
-    {
-        // Bio functionality
-        // Retrieve or save bio based on input
-    }
-    else if (strncmp(message, "/addfriend ", 11) == 0)
-    {
-        char target_username[50];
-        if (sscanf(message + 11, "%49s", target_username) == 1)
-        {
-            traiter_addfriend(utilisateur, target_username);
-        }
-        else
-        {
-            write_client(utilisateur->sock, "Format incorrect. Utilisez : /addfriend [username]\n");
-        }
-    }
-    else if (strcmp(message, "/friends") == 0)
-    {
-        // Show friend list functionality
-    }
-    else if (strncmp(message, "/faccept ", 9) == 0)
-    {
-        char friend_username[50];
-        if (sscanf(message + 9, "%49s", friend_username) == 1)
-        {
-            traiter_faccept(utilisateur, friend_username);
-        }
-        else
-        {
-            write_client(utilisateur->sock, "Format incorrect. Utilisez : /faccept [username]\n");
-        }
-    }
-    else if (strncmp(message, "/fdecline ", 9) == 0)
-    {
-        char friend_username[50];
-        if (sscanf(message + 9, "%49s", friend_username) == 1)
-        {
-            traiter_fdecline(utilisateur, friend_username);
-        }
-        else
-        {
-            write_client(utilisateur->sock, "Format incorrect. Utilisez : /fdecline [username]\n");
-        }
-    }
-    else
-    {
-        envoyerMessagePublic(utilisateur, message);
     }
 }
-
 static void app(void)
 {
     SOCKET sock = init_connection();
@@ -830,18 +902,27 @@ static void app(void)
             if (FD_ISSET(utilisateur->sock, &rdfs))
             {
                 int n = read_client(utilisateur->sock, buffer);
-                if (n == 0)
-                { // Déconnexion de l'utilisateur
-                    printf("Déconnexion de %s\n", utilisateur->username);
+                if (n == 0 || utilisateur->sock == INVALID_SOCKET)
+                { // Déconnexion du client
+                    printf("Déconnexion de l'utilisateur : %s\n", utilisateur->username);
+
+                    // Réinitialiser isConnected et d'autres champs utilisateur
+                    utilisateur->isConnected = 0;
+                    memset(utilisateur->username, 0, sizeof(utilisateur->username));
+                    memset(utilisateur->pseudo, 0, sizeof(utilisateur->pseudo));
+
+                    // Fermer la connexion et réorganiser la liste
                     closesocket(utilisateur->sock);
-                    // Gestion de la suppression de l'utilisateur
+                    utilisateur->sock = INVALID_SOCKET;
+
                     for (int j = i; j < nbUtilisateursConnectes - 1; j++)
                     {
                         utilisateurs[j] = utilisateurs[j + 1];
                     }
                     nbUtilisateursConnectes--;
-                    i--;
+                    i--; // Réajuster l'index pour ne pas sauter un utilisateur
                 }
+
                 else
                 {
                     // Traiter le message de l'utilisateur
@@ -856,6 +937,12 @@ static void app(void)
     {
         closesocket(utilisateurs[i].sock);
     }
+    for (int i = 0; i < nbUtilisateursConnectes; i++)
+    {
+        utilisateurs[i].isConnected = 0; // Réinitialiser l'état des utilisateurs
+        closesocket(utilisateurs[i].sock);
+    }
+
     end_connection(sock);
 }
 
