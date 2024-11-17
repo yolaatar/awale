@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include "server2.h"
 #include "client2.h"
 #include "awale.h"
@@ -370,7 +372,27 @@ void traiter_signin(Utilisateur *utilisateur, const char *username, const char *
     int result = ajouter_utilisateur(username, password);
     if (result == 1)
     {
+        char user_dir[150];
+        snprintf(user_dir, sizeof(user_dir), "players/%s", username);
+        mkdir(user_dir, 0777);
+        char bio_file[150];
+        snprintf(bio_file, sizeof(bio_file), "%s/bio", user_dir);
+        FILE *bio = fopen(bio_file, "w");
+        if (bio != NULL)
+        {
+            fclose(bio);
+        }
+
+        char friends_file[150];
+        snprintf(friends_file, sizeof(friends_file), "%s/friends", user_dir);
+        FILE *friends = fopen(friends_file, "w");
+        if (friends != NULL)
+        {
+            fclose(friends);
+        }
+
         write_client(utilisateur->sock, "Inscription réussie ! Connectez-vous avec /login.\n");
+        printf("Nouvel utilisateur inscrit et dossier créé : '%s'\n", username);
     }
     else if (result == 0)
     {
@@ -381,6 +403,28 @@ void traiter_signin(Utilisateur *utilisateur, const char *username, const char *
         write_client(utilisateur->sock, "Erreur lors de l'inscription.\n");
     }
 }
+
+void supprimer_utilisateur_connecte(const char *username)
+{
+    for (int i = 0; i < MAX_CLIENTS; i++)
+    {
+        if (utilisateurs[i].isConnected && strcmp(utilisateurs[i].username, username) == 0)
+        {
+            utilisateurs[i].isConnected = 0;
+            memset(utilisateurs[i].username, 0, sizeof(utilisateurs[i].username));
+            return;
+        }
+    }
+}
+
+void traiter_logout(Utilisateur *utilisateur) {
+    supprimer_utilisateur_connecte(utilisateur->username);
+    write_client(utilisateur->sock, "Vous avez été déconnecté. Au revoir !\n");
+    printf("Utilisateur %s s'est déconnecté.\n", utilisateur->username);
+    end_connection(utilisateur->sock);  
+    utilisateur->sock = INVALID_SOCKET;
+}
+
 
 void traiterMessage(Utilisateur *utilisateur, char *message)
 {
@@ -458,8 +502,7 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
     }
     else if (strcmp(message, "/logout") == 0)
     {
-        // Logout functionality
-        // Call supprimer_utilisateur_connecte() and close socket
+        traiter_logout(utilisateur);
     }
     else if (strncmp(message, "/bio ", 5) == 0)
     {
