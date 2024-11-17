@@ -300,7 +300,7 @@ void traiter_login(Utilisateur *utilisateur, const char *username, const char *p
         strncpy(utilisateur->username, username, sizeof(utilisateur->username) - 1);
         write_client(utilisateur->sock, "Connexion réussie !\n");
         char buffer[BUF_SIZE] = {0};
-        snprintf(buffer, BUF_SIZE, "Bienvenue %s ! Utilisez /challenge <pseudo> pour lancer un défi.\n", utilisateur->username);
+        snprintf(buffer, BUF_SIZE, "Bienvenue %s ! Utilisez /challenge <username> pour lancer un défi.\n", utilisateur->username);
         write_client(utilisateur->sock, buffer);
     }
     else
@@ -419,12 +419,205 @@ void supprimer_utilisateur_connecte(const char *username)
     }
 }
 
-void traiter_logout(Utilisateur *utilisateur) {
+void traiter_logout(Utilisateur *utilisateur)
+{
     printf("Utilisateur %s s'est déconnecté.\n", utilisateur->username);
+    // on recupére le socket de l'utilisateur
+    SOCKET sock = utilisateur->sock;
     supprimer_utilisateur_connecte(utilisateur->username);
-    write_client(utilisateur->sock, "Vous avez été déconnecté. Au revoir !\n");
-    end_connection(utilisateur->sock);  
+    write_client(sock, "Vous avez été déconnecté. Au revoir !\n");
+    end_connection(sock);
     utilisateur->sock = INVALID_SOCKET;
+    sock = INVALID_SOCKET;
+}
+
+int ajouter_ligne_fichier(const char *username, const char *filename, const char *line)
+{
+    char filepath[150];
+    snprintf(filepath, sizeof(filepath), "Serveur/players/%s/%s", username, filename);
+
+    FILE *file = fopen(filepath, "a");
+    if (!file)
+    {
+        perror("Erreur lors de l'ouverture du fichier pour ajout");
+        return 0;
+    }
+
+    fprintf(file, "%s\n", line);
+    fclose(file);
+    return 1;
+}
+
+void traiter_addfriend(Utilisateur *utilisateur, const char *target_username)
+{
+    // Prevent adding oneself as a friend
+    if (strcmp(utilisateur->username, target_username) == 0)
+    {
+        write_client(utilisateur->sock, "Erreur : Vous ne pouvez pas vous ajouter en ami vous-même.\n");
+        return;
+    }
+
+    // Check if target user exists in the users file
+    FILE *file = fopen("Serveur/utilisateurs.txt", "r");
+    if (file == NULL)
+    {
+        write_client(utilisateur->sock, "Erreur : Impossible d'accéder aux informations utilisateur.\n");
+        return;
+    }
+
+    char line[256];
+    int user_found = 0;
+
+    while (fgets(line, sizeof(line), file))
+    {
+        char id[10], username[50], password[50];
+        sscanf(line, "%[^,],%[^,],%[^,]", id, username, password);
+
+        if (strcmp(username, target_username) == 0)
+        {
+            user_found = 1;
+
+            // Prepare the friend request
+            char friends_file[150];
+            snprintf(friends_file, sizeof(friends_file), "Serveur/players/%s/friends", target_username);
+
+            FILE *friends = fopen(friends_file, "a");
+            if (friends == NULL)
+            {
+                write_client(utilisateur->sock, "Erreur : Impossible d'envoyer la demande d'ami.\n");
+                fclose(file);
+                return;
+            }
+
+            // Write the friend request to the target user's friends file
+            fprintf(friends, "request:%s\n", utilisateur->username);
+            fclose(friends);
+
+            // Notify the user about the successful friend request
+            char msg[150];
+            snprintf(msg, sizeof(msg), "Demande d'ami envoyée à %s.\n", target_username);
+            write_client(utilisateur->sock, msg);
+            // Notify the target user about the friend request
+            Utilisateur *adversaire = trouverUtilisateurParUsername(target_username);
+            snprintf(msg, sizeof(msg), "Vous avez reçu une demande d'ami de %s.\n", utilisateur->username);
+            write_client(adversaire->sock, msg);
+            break;
+        }
+    }
+
+    fclose(file);
+
+    if (!user_found)
+    {
+        write_client(utilisateur->sock, "Erreur : Utilisateur introuvable.\n");
+    }
+}
+
+int supprimer_ligne_fichier(const char *username, const char *filename, const char *line_to_remove)
+{
+    char filepath[150];
+    snprintf(filepath, sizeof(filepath), "Serveur/players/%s/%s", username, filename);
+
+    FILE *file = fopen(filepath, "r");
+    if (!file)
+    {
+        char msg[150];
+        snprintf(msg, sizeof(msg), "Erreur lors de l'ouverture du fichier pour suppression %s", filepath);
+        perror(msg);
+        return 0;
+    }
+
+    FILE *temp = fopen("temp.txt", "w");
+    if (!temp)
+    {
+        perror("Erreur lors de la création du fichier temporaire");
+        fclose(file);
+        return 0;
+    }
+
+    char line[256];
+    int line_removed = 0;
+
+    while (fgets(line, sizeof(line), file))
+    {
+        if (strncmp(line, line_to_remove, strlen(line_to_remove)) != 0)
+        {
+            fputs(line, temp);
+        }
+        else
+        {
+            line_removed = 1;
+        }
+    }
+
+    fclose(file);
+    fclose(temp);
+
+    remove(filepath);
+    rename("temp.txt", filepath);
+
+    return line_removed;
+}
+
+void traiter_faccept(Utilisateur *utilisateur, const char *friend_username)
+{
+    // Path to the current user's friend file
+    char friend_file[150];
+    snprintf(friend_file, sizeof(friend_file), "Serveur/players/%s/friends", utilisateur->username);
+
+    // Construct the line to remove from the user's friend file
+    char line_to_remove[150];
+    snprintf(line_to_remove, sizeof(line_to_remove), "request:%s", friend_username);
+
+    // Remove the friend request from the user's file
+    if (supprimer_ligne_fichier(utilisateur->username, "friends", line_to_remove))
+    {
+        char line_to_add[150];
+        snprintf(line_to_add, sizeof(line_to_add), "friend:%s", friend_username);
+
+        // Add the friend entry to the user's friend file
+        ajouter_ligne_fichier(utilisateur->username, "friends", line_to_add);
+
+        // Add the friend entry to the target user's friend file
+        snprintf(line_to_add, sizeof(line_to_add), "friend:%s", utilisateur->username);
+        ajouter_ligne_fichier(friend_username, "friends", line_to_add);
+
+        write_client(utilisateur->sock, "Demande d'ami acceptée.\n");
+
+        // Notify the friend if they are online
+        Utilisateur *friend_user = trouverUtilisateurParUsername(friend_username);
+        if (friend_user != NULL)
+        {
+            char msg[150];
+            snprintf(msg, sizeof(msg), "%s a accepté votre demande d'ami.\n", utilisateur->username);
+            write_client(friend_user->sock, msg);
+        }
+    }
+    else
+    {
+        write_client(utilisateur->sock, "Aucune demande d'ami trouvée de cet utilisateur.\n");
+    }
+}
+
+void traiter_fdecline(Utilisateur *utilisateur, const char *friend_username) {
+    // Construct the line to remove from the user's friend file
+    char line_to_remove[150];
+    snprintf(line_to_remove, sizeof(line_to_remove), "request:%s", friend_username);
+
+    // Attempt to remove the friend request
+    if (supprimer_ligne_fichier(utilisateur->username, "friends", line_to_remove)) {
+        write_client(utilisateur->sock, "Demande d'ami refusée.\n");
+
+        // Notify the friend if they are online
+        Utilisateur *friend_user = trouverUtilisateurParUsername(friend_username);
+        if (friend_user != NULL) {
+            char msg[150];
+            snprintf(msg, sizeof(msg), "%s a refusé votre demande d'ami :(.\n", utilisateur->username);
+            write_client(friend_user->sock, msg);
+        }
+    } else {
+        write_client(utilisateur->sock, "Aucune demande d'ami trouvée de cet utilisateur.\n");
+    }
 }
 
 
@@ -469,7 +662,7 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
         char buffer[BUF_SIZE] = "Joueurs en ligne :\n";
         for (int i = 0; i < nbUtilisateursConnectes; i++)
         {
-            strncat(buffer, utilisateurs[i].pseudo, BUF_SIZE - strlen(buffer) - 1);
+            strncat(buffer, utilisateurs[i].username, BUF_SIZE - strlen(buffer) - 1);
             strncat(buffer, "\n", BUF_SIZE - strlen(buffer) - 1);
         }
         write_client(utilisateur->sock, buffer);
@@ -513,7 +706,15 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
     }
     else if (strncmp(message, "/addfriend ", 11) == 0)
     {
-        // Add friend functionality
+        char target_username[50];
+        if (sscanf(message + 11, "%49s", target_username) == 1)
+        {
+            traiter_addfriend(utilisateur, target_username);
+        }
+        else
+        {
+            write_client(utilisateur->sock, "Format incorrect. Utilisez : /addfriend [username]\n");
+        }
     }
     else if (strcmp(message, "/friends") == 0)
     {
@@ -521,7 +722,27 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
     }
     else if (strncmp(message, "/faccept ", 9) == 0)
     {
-        // Accept friend request functionality
+        char friend_username[50];
+        if (sscanf(message + 9, "%49s", friend_username) == 1)
+        {
+            traiter_faccept(utilisateur, friend_username);
+        }
+        else
+        {
+            write_client(utilisateur->sock, "Format incorrect. Utilisez : /faccept [username]\n");
+        }
+    }
+    else if (strncmp(message, "/fdecline ", 9) == 0)
+    {
+        char friend_username[50];
+        if (sscanf(message + 9, "%49s", friend_username) == 1)
+        {
+            traiter_fdecline(utilisateur, friend_username);
+        }
+        else
+        {
+            write_client(utilisateur->sock, "Format incorrect. Utilisez : /fdecline [username]\n");
+        }
     }
     else
     {
@@ -611,7 +832,7 @@ static void app(void)
                 int n = read_client(utilisateur->sock, buffer);
                 if (n == 0)
                 { // Déconnexion de l'utilisateur
-                    printf("Déconnexion de %s\n", utilisateur->pseudo);
+                    printf("Déconnexion abbérante de %s\n", utilisateur->username);
                     closesocket(utilisateur->sock);
                     // Gestion de la suppression de l'utilisateur
                     for (int j = i; j < nbUtilisateursConnectes - 1; j++)

@@ -1,6 +1,6 @@
 # Variables de compilation
 CC = gcc
-CFLAGS = -Wall -Wextra -g -Wno-unused-parameter -Wno-unused-function
+CFLAGS = 
 SERVER_SOURCES = Serveur/awaleTest.c Serveur/serveurReworked.c
 CLIENT_SOURCES = Client/client2.c
 SERVER_OBJECTS = $(SERVER_SOURCES:.c=.o)
