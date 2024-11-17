@@ -832,7 +832,7 @@ static void app(void)
                 int n = read_client(utilisateur->sock, buffer);
                 if (n == 0)
                 { // Déconnexion de l'utilisateur
-                    printf("Déconnexion abbérante de %s\n", utilisateur->username);
+                    printf("Déconnexion de %s\n", utilisateur->username);
                     closesocket(utilisateur->sock);
                     // Gestion de la suppression de l'utilisateur
                     for (int j = i; j < nbUtilisateursConnectes - 1; j++)
