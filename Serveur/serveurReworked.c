@@ -247,7 +247,7 @@ int est_deja_connecte(const char *username)
 
 int verifier_identifiants(const char *username, const char *password)
 {
-    FILE *file = fopen("utilisateurs.txt", "r");
+    FILE *file = fopen("Serveur/utilisateurs.txt", "r");
     if (file == NULL)
     {
         perror("Erreur lors de l'ouverture du fichier utilisateurs.txt");
@@ -314,7 +314,7 @@ int ajouter_utilisateur(const char *username, const char *password)
         return 0; // L'utilisateur existe déjà
     }
 
-    FILE *file = fopen("utilisateurs.txt", "a");
+    FILE *file = fopen("Serveur/utilisateurs.txt", "a");
     if (!file)
     {
         perror("Erreur lors de l'ouverture du fichier utilisateurs.txt");
@@ -322,7 +322,7 @@ int ajouter_utilisateur(const char *username, const char *password)
     }
 
     int new_id = 0;
-    FILE *file_read = fopen("utilisateurs.txt", "r");
+    FILE *file_read = fopen("Serveur/utilisateurs.txt", "r");
     if (file_read)
     {
         char line[150];
@@ -342,7 +342,7 @@ int ajouter_utilisateur(const char *username, const char *password)
     fclose(file);
 
     // Création du répertoire principal 'players'
-    char base_dir[] = "players";
+    char base_dir[] = "Serveur/players";
     mkdir(base_dir, 0777);
     // Création du sous-dossier de l'utilisateur
     char user_dir[150];
