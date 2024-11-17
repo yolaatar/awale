@@ -32,8 +32,9 @@ int initialiserPartie(Partie *partie) {
     // };
     // partie->plateau = plateauTest;
 
-    snprintf(partie->joueur1.pseudo, sizeof(partie->joueur1.pseudo), "Chaouki");
-    snprintf(partie->joueur2.pseudo, sizeof(partie->joueur2.pseudo), "Yolaatar");
+    snprintf(partie->joueur1.pseudo, sizeof(partie->joueur1.pseudo), "%s", partie->joueur1.pseudo);
+    snprintf(partie->joueur2.pseudo, sizeof(partie->joueur2.pseudo), "%s", partie->joueur2.pseudo);
+
 
     partie->joueur1.score = 0;
     partie->joueur2.score = 0;

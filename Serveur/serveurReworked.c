@@ -154,7 +154,9 @@ void creerSalon(Utilisateur *joueur1, Utilisateur *joueur2)
 
     Salon *salon = &salons[nbSalons++];
     salon->joueur1 = joueur1;
+    strcpy(salon->partie.joueur1.pseudo, joueur1->username);
     salon->joueur2 = joueur2;
+    strcpy(salon->partie.joueur2.pseudo, joueur2->username);
     salon->tourActuel = 0;
     salon->statut = 1;
 
@@ -167,11 +169,11 @@ void creerSalon(Utilisateur *joueur1, Utilisateur *joueur2)
     envoyer_plateau_aux_users(joueur1, joueur2, &salon->partie);
 }
 
-Utilisateur *trouverUtilisateurParPseudo(const char *pseudo)
+Utilisateur *trouverUtilisateurParUsername(const char *username)
 {
     for (int i = 0; i < nbUtilisateursConnectes; i++)
     {
-        if (strcmp(utilisateurs[i].pseudo, pseudo) == 0)
+        if (strcmp(utilisateurs[i].username, username) == 0)
         {
             return &utilisateurs[i];
         }
@@ -199,7 +201,7 @@ void envoyerAide(Utilisateur *utilisateur)
 void envoyerMessagePublic(Utilisateur *expediteur, const char *message)
 {
     char buffer[BUF_SIZE];
-    snprintf(buffer, BUF_SIZE, "%s : %s\n", expediteur->pseudo, message);
+    snprintf(buffer, BUF_SIZE, "%s : %s\n", expediteur->username, message);
     for (int i = 0; i < nbUtilisateursConnectes; i++)
     {
         write_client(utilisateurs[i].sock, buffer);
@@ -430,8 +432,8 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
 {
     if (strncmp(message, "/challenge ", 11) == 0)
     {
-        char *pseudo = message + 11;
-        Utilisateur *adversaire = trouverUtilisateurParPseudo(pseudo);
+        char *username = message + 11;
+        Utilisateur *adversaire = trouverUtilisateurParUsername(username);
         if (adversaire != NULL && adversaire->estEnJeu == 0)
         {
             adversaire->challenger = utilisateur; // Set pending challenge
@@ -504,7 +506,7 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
     {
         traiter_logout(utilisateur);
     }
-    else if (strncmp(message, "/bio ", 5) == 0)
+    else if (strncmp(message, "/bio", 4) == 0)
     {
         // Bio functionality
         // Retrieve or save bio based on input
