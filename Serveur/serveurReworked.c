@@ -418,9 +418,9 @@ void supprimer_utilisateur_connecte(const char *username)
 }
 
 void traiter_logout(Utilisateur *utilisateur) {
+    printf("Utilisateur %s s'est déconnecté.\n", utilisateur->username);
     supprimer_utilisateur_connecte(utilisateur->username);
     write_client(utilisateur->sock, "Vous avez été déconnecté. Au revoir !\n");
-    printf("Utilisateur %s s'est déconnecté.\n", utilisateur->username);
     end_connection(utilisateur->sock);  
     utilisateur->sock = INVALID_SOCKET;
 }
