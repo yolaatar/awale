@@ -63,6 +63,9 @@ Utilisateur utilisateurs[MAX_CLIENTS];
 int nbUtilisateursConnectes = 0;
 int nbSalons = 0;
 
+void mettre_a_jour_statistiques(const char *username, int match_increment, int win_increment, int loss_increment);
+
+
 void initialiserUtilisateurs(void)
 {
     for (int i = 0; i < MAX_CLIENTS; i++)
@@ -209,29 +212,55 @@ void terminerPartie(Salon *salon)
     {
         write_client(salon->joueur1->sock, "Vous avez gagné !\n");
         write_client(salon->joueur2->sock, "Vous avez perdu.\n");
+
+        mettre_a_jour_statistiques(salon->joueur1->username, 1, 1, 0);
+        mettre_a_jour_statistiques(salon->joueur2->username, 1, 0, 1);
     }
     else if (salon->partie.joueur1.score < salon->partie.joueur2.score)
     {
         write_client(salon->joueur1->sock, "Vous avez perdu.\n");
         write_client(salon->joueur2->sock, "Vous avez gagné !\n");
+
+        mettre_a_jour_statistiques(salon->joueur1->username, 1, 0, 1);
+        mettre_a_jour_statistiques(salon->joueur2->username, 1, 1, 0);
     }
     else
     {
         write_client(salon->joueur1->sock, "Match nul !\n");
         write_client(salon->joueur2->sock, "Match nul !\n");
+
+        mettre_a_jour_statistiques(salon->joueur1->username, 1, 0, 0);
+        mettre_a_jour_statistiques(salon->joueur2->username, 1, 0, 0);
     }
 
     write_client(salon->joueur1->sock, "La partie est terminée.\n");
     write_client(salon->joueur2->sock, "La partie est terminée.\n");
 }
 
-void envoyerAide(Utilisateur *utilisateur)
-{
+
+void envoyerAide(Utilisateur *utilisateur) {
     write_client(utilisateur->sock, "Commandes disponibles :\n");
-    write_client(utilisateur->sock, "/challenge <nom> - Défier un joueur\n");
-    write_client(utilisateur->sock, "/play <case> - Jouer sur une case\n");
-    write_client(utilisateur->sock, "/help - Afficher l'aide\n");
+    write_client(utilisateur->sock, "/login [username] [password] - Se connecter.\n");
+    write_client(utilisateur->sock, "/signin [username] [password] - Créer un compte.\n");
+    write_client(utilisateur->sock, "/logout - Se déconnecter.\n");
+    write_client(utilisateur->sock, "/challenge [username] - Défier un joueur.\n");
+    write_client(utilisateur->sock, "/accept - Accepter un défi.\n");
+    write_client(utilisateur->sock, "/decline - Refuser un défi.\n");
+    write_client(utilisateur->sock, "/play [case] - Jouer sur une case.\n");
+    write_client(utilisateur->sock, "/addfriend [username] - Ajouter un ami.\n");
+    write_client(utilisateur->sock, "/faccept [username] - Accepter une demande d'ami.\n");
+    write_client(utilisateur->sock, "/fdecline [username] - Refuser une demande d'ami.\n");
+    write_client(utilisateur->sock, "/friends - Voir la liste des amis.\n");
+    write_client(utilisateur->sock, "/search [username] - Rechercher un utilisateur.\n");
+    write_client(utilisateur->sock, "/profile - Voir votre profil.\n");
+    write_client(utilisateur->sock, "/public - Passer en mode public.\n");
+    write_client(utilisateur->sock, "/private - Passer en mode privé.\n");
+    write_client(utilisateur->sock, "/help - Voir cette liste de commandes.\n");
+    write_client(utilisateur->sock, "/list - Voir la liste des joueurs en ligne.\n");
+    write_client(utilisateur->sock, "/friendrequest - Voir vos demandes d'amis en attente.\n");
+    write_client(utilisateur->sock, "/bio - Modifier votre bio.\n");
 }
+
 
 void envoyerMessagePublic(Utilisateur *expediteur, const char *message)
 {
@@ -429,6 +458,22 @@ int ajouter_utilisateur(const char *username, const char *password)
     FILE *friends = fopen(friends_file, "w");
     if (friends)
         fclose(friends);
+
+    char stats_file[150];
+    snprintf(stats_file, sizeof(stats_file), "%s/statistics", user_dir);
+
+    FILE *stats = fopen(stats_file, "w");
+    if (stats)
+    {
+        // Initialise le fichier avec 0 matchs, 0 victoires, 0 défaites
+        fprintf(stats, "matches:0\nwins:0\nlosses:0\n");
+        fclose(stats);
+    }
+    else
+    {
+        perror("Erreur lors de la création du fichier statistiques");
+    }
+
 
     return 1; // Inscription réussie
 }
@@ -694,6 +739,58 @@ void traiter_fdecline(Utilisateur *utilisateur, const char *friend_username)
     }
 }
 
+void lire_statistiques(const char *username, int *matches, int *wins, int *losses)
+{
+    char stats_file[150];
+    snprintf(stats_file, sizeof(stats_file), "Serveur/players/%s/statistics", username);
+
+    FILE *file = fopen(stats_file, "r");
+    if (file)
+    {
+        char line[256];
+        while (fgets(line, sizeof(line), file))
+        {
+            if (strncmp(line, "matches:", 8) == 0)
+                *matches = atoi(line + 8);
+            else if (strncmp(line, "wins:", 5) == 0)
+                *wins = atoi(line + 5);
+            else if (strncmp(line, "losses:", 7) == 0)
+                *losses = atoi(line + 7);
+        }
+        fclose(file);
+    }
+    else
+    {
+        perror("Erreur lors de la lecture des statistiques");
+        *matches = *wins = *losses = 0;
+    }
+}
+
+void mettre_a_jour_statistiques(const char *username, int match_increment, int win_increment, int loss_increment)
+{
+    char stats_file[150];
+    snprintf(stats_file, sizeof(stats_file), "Serveur/players/%s/statistics", username);
+
+    int matches = 0, wins = 0, losses = 0;
+    lire_statistiques(username, &matches, &wins, &losses);
+
+    matches += match_increment;
+    wins += win_increment;
+    losses += loss_increment;
+
+    FILE *file = fopen(stats_file, "w");
+    if (file)
+    {
+        fprintf(file, "matches:%d\nwins:%d\nlosses:%d\n", matches, wins, losses);
+        fclose(file);
+    }
+    else
+    {
+        perror("Erreur lors de la mise à jour des statistiques");
+    }
+}
+
+
 int save_bio_to_file(const char *username, const char *bio)
 {
     char bio_file[150];
@@ -753,15 +850,22 @@ void get_user_bio(const char *username, char *bio, size_t bio_size)
     FILE *file = fopen(bio_file, "r");
     if (file)
     {
-        fread(bio, 1, bio_size - 1, file);
-        bio[bio_size - 1] = '\0'; // Ensure null termination
+        size_t bytes_read = fread(bio, 1, bio_size - 1, file);
+        bio[bytes_read] = '\0'; // Assure la terminaison du buffer
         fclose(file);
+
+        // Vérifier si le fichier était vide ou uniquement composé d'espaces/blancs
+        if (bytes_read == 0 || strlen(bio) == 0 || strspn(bio, " \t\r\n") == strlen(bio))
+        {
+            snprintf(bio, bio_size, "Aucune bio");
+        }
     }
     else
     {
-        snprintf(bio, bio_size, "Non renseignée"); // Default message if bio not found
+        snprintf(bio, bio_size, "Aucune bio"); // Message par défaut si le fichier n'existe pas
     }
 }
+
 
 void traiter_search(Utilisateur *utilisateur, const char *search_username)
 {
@@ -771,17 +875,22 @@ void traiter_search(Utilisateur *utilisateur, const char *search_username)
         return;
     }
 
-    // Retrieve user bio
+    // Récupérer la bio de l'utilisateur
     char bio[1024];
     get_user_bio(search_username, bio, sizeof(bio));
 
-    // Format and send the user's information
+    // Lire les statistiques
+    int matches = 0, wins = 0, losses = 0;
+    lire_statistiques(search_username, &matches, &wins, &losses);
+
+    // Format et envoi des informations
     char info[BUF_SIZE];
     snprintf(info, sizeof(info),
-             "Informations sur %s :\n- Bio : %s\n- Victoires : 0\n- Défaites : 0\n",
-             search_username, bio);
+             "Informations sur %s :\n- Bio : %s\n- Matchs joués : %d\n- Victoires : %d\n- Défaites : %d\n",
+             search_username, bio, matches, wins, losses);
     write_client(utilisateur->sock, info);
 }
+
 
 void lire_relations(const char *friend_file, const char *prefix, char *output, size_t output_size)
 {
@@ -1072,6 +1181,11 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
         else if (strcmp(message, "/public") == 0)
         {
             // MODE PUBLIC
+        }
+        else if (strcmp(message, "/profile") == 0)
+        {
+            traiter_search(utilisateur, utilisateur->username);
+            // Afficher mon profil
         }
         else
         {
