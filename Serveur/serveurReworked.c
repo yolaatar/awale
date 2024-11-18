@@ -65,9 +65,6 @@ static void end(void)
 
 Utilisateur *queue[MAX_QUEUE];
 int queueSize = 0;
-
-Utilisateur *queue[MAX_QUEUE];
-int queueSize = 0;
 Salon salons[MAX_SALONS];
 Utilisateur utilisateurs[MAX_CLIENTS];
 int nbUtilisateursConnectes = 0;
@@ -157,7 +154,6 @@ void envoyer_plateau_spectateur(Utilisateur *spectateur, Partie *partie)
 }
 
 void envoyer_plateau_aux_users(Utilisateur *joueur1, Utilisateur *joueur2, Partie *partie, int tour)
-void envoyer_plateau_aux_users(Utilisateur *joueur1, Utilisateur *joueur2, Partie *partie, int tour)
 {
     char buffer[BUF_SIZE];
 
@@ -174,7 +170,6 @@ void envoyer_plateau_aux_users(Utilisateur *joueur1, Utilisateur *joueur2, Parti
     for (int i = 0; i < 6; i++)
     {
         snprintf(temp, sizeof(temp), "%2d ", partie->plateau.cases[i].nbGraines);
-        snprintf(temp, sizeof(temp), "%2d ", partie->plateau.cases[i].nbGraines);
         strncat(buffer, temp, BUF_SIZE - strlen(buffer) - 1);
     }
     strncat(buffer, "\n   ", BUF_SIZE - strlen(buffer) - 1);
@@ -183,7 +178,6 @@ void envoyer_plateau_aux_users(Utilisateur *joueur1, Utilisateur *joueur2, Parti
     for (int i = 11; i >= 6; i--)
     {
         snprintf(temp, sizeof(temp), "%2d ", partie->plateau.cases[i].nbGraines);
-        snprintf(temp, sizeof(temp), "%2d ", partie->plateau.cases[i].nbGraines);
         strncat(buffer, temp, BUF_SIZE - strlen(buffer) - 1);
     }
     strncat(buffer, "\n", BUF_SIZE - strlen(buffer) - 1);
@@ -191,11 +185,7 @@ void envoyer_plateau_aux_users(Utilisateur *joueur1, Utilisateur *joueur2, Parti
     // Information sur le Joueur 2
     snprintf(temp, sizeof(temp), "  Joueur 2 : %s, Score : %d\n", partie->joueur2.pseudo, partie->joueur2.score);
     strncat(buffer, temp, BUF_SIZE - strlen(buffer) - 1);
-    // Information sur le Joueur 2
-    snprintf(temp, sizeof(temp), "  Joueur 2 : %s, Score : %d\n", partie->joueur2.pseudo, partie->joueur2.score);
-    strncat(buffer, temp, BUF_SIZE - strlen(buffer) - 1);
 
-    strncat(buffer, "  --------------------------\n", BUF_SIZE - strlen(buffer) - 1);
     strncat(buffer, "  --------------------------\n", BUF_SIZE - strlen(buffer) - 1);
 
     // Envoi du plateau aux deux joueurs
@@ -231,21 +221,12 @@ void creerSalon(Utilisateur *joueur1, Utilisateur *joueur2)
     {
         // print l'état du touractuel
         printf("Tour actuel quand je crée la partie : %d\n", salon->tourActuel);
-        // print l'état du touractuel
-        printf("Tour actuel quand je crée la partie : %d\n", salon->tourActuel);
         salon->joueur2 = joueur1;
         strcpy(salon->partie.joueur2.pseudo, joueur1->username);
         salon->joueur1 = joueur2;
         strcpy(salon->partie.joueur1.pseudo, joueur2->username);
         salon->tourActuel = 1;
-        salon->tourActuel = 1;
     }
-    else
-    {
-        salon->joueur1 = joueur1;
-        strcpy(salon->partie.joueur1.pseudo, joueur1->username);
-        salon->joueur2 = joueur2;
-        strcpy(salon->partie.joueur2.pseudo, joueur2->username);
     else
     {
         salon->joueur1 = joueur1;
@@ -257,17 +238,12 @@ void creerSalon(Utilisateur *joueur1, Utilisateur *joueur2)
     }
     salon->statut = 1;
     int tour = salon->tourActuel;
-        
-    }
-    salon->statut = 1;
-    int tour = salon->tourActuel;
     initialiserPartie(&salon->partie);
     joueur1->estEnJeu = 1;
     joueur2->estEnJeu = 1;
     joueur1->partieEnCours = salon;
     joueur2->partieEnCours = salon;
 
-    envoyer_plateau_aux_users(joueur1, joueur2, &salon->partie, tour);
     envoyer_plateau_aux_users(joueur1, joueur2, &salon->partie, tour);
 }
 
@@ -371,9 +347,6 @@ void playCoup(Salon *salon, Utilisateur *joueur, int caseJouee)
 
     else if (jouerCoup(partie, caseJouee, joueurIndex + 1) == 0)
     {
-        salon->tourActuel = (salon->tourActuel + 1) % 2;
-        int tour = salon->tourActuel;
-        envoyer_plateau_aux_users(salon->joueur1, salon->joueur2, partie, tour);  
         salon->tourActuel = (salon->tourActuel + 1) % 2;
         int tour = salon->tourActuel;
         envoyer_plateau_aux_users(salon->joueur1, salon->joueur2, partie, tour);  
@@ -1351,14 +1324,6 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
         {
             leaveQueue(utilisateur);
         }
-        else if (strcmp(message, "/queueup") == 0)
-        {
-            joinQueue(utilisateur);
-        }
-        else if (strcmp(message, "/leavequeue") == 0)
-        {
-            leaveQueue(utilisateur);
-        }
         else if (strcmp(message, "/help") == 0)
         {
             envoyerAide(utilisateur);
@@ -1441,7 +1406,7 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
         else if ((strcmp(message, "/ff") == 0) && !utilisateur->estEnJeu)
         {
             write_client(utilisateur->sock, "Vous devez être en partie pour executer cette commande !\n");
-          
+           
         }
         else if (strncmp(message, "/watch ", 7) == 0) // Comparer 7 caractères ("/watch ")
         {
