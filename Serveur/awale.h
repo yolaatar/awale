@@ -5,7 +5,7 @@
 #include <stdio.h>
 
 // Définition de constantes
-#define BUF_SIZE 1024
+#define BUF_SIZE 2048
 
 // Structures du jeu Awale
 typedef struct {

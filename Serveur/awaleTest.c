@@ -234,7 +234,7 @@ int verifierFinPartie(Partie *partie) {
     }
 
     // Fin de partie par indétermination si le nombre total de graines est très faible (2 ou 3)
-    if (totalGraines <= 3) {
+    if (totalGraines <= 3 && (!peutForcerCapture(partie, 1) && !peutForcerCapture(partie, 2))) {
         printf("Fin de la partie par indétermination : trop peu de graines pour capturer.\n");
         
         // Chaque joueur récupère les graines restantes dans son camp
@@ -248,12 +248,6 @@ int verifierFinPartie(Partie *partie) {
         }
 
         return 1; // La partie se termine
-    }
-
-    // Vérifie si aucun joueur ne peut forcer une capture
-    if (!peutForcerCapture(partie, 1) && !peutForcerCapture(partie, 2)) {
-        printf("Fin de la partie : aucun joueur ne peut forcer une capture.\n");
-        return 1; // Aucun joueur ne peut forcer une capture, la partie se termine
     }
 
     return 0; // La partie peut continuer
