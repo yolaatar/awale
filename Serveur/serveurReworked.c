@@ -177,10 +177,10 @@ void creerSalon(Utilisateur *joueur1, Utilisateur *joueur2)
     }
     else
     {
-        salon->joueur1 = joueur1;
-        strcpy(salon->partie.joueur1.pseudo, joueur1->username);
-        salon->joueur2 = joueur2;
-        strcpy(salon->partie.joueur2.pseudo, joueur2->username);
+        salon->joueur2 = joueur1;
+        strcpy(salon->partie.joueur2.pseudo, joueur1->username);
+        salon->joueur1 = joueur2;
+        strcpy(salon->partie.joueur1.pseudo, joueur2->username);
     }
     salon->tourActuel = 0;
     salon->statut = 1;
