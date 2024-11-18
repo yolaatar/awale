@@ -10,7 +10,7 @@ CLIENT_EXEC = clientAwale
 UTILISATEURS_FILE = Serveur/utilisateurs.txt
 PLAYERS_DIR = Serveur/players
 
-# Liste d'utilisateurs pré-créés pour "populate"
+# Liste d'utilisateurs pré-créés pour "database"
 USERS = "1,player1,mdp1" "2,player2,mdp2" "3,player3,mdp3"
 
 # Règle par défaut
@@ -43,7 +43,7 @@ $(PLAYERS_DIR):
 	@mkdir -p $(PLAYERS_DIR)
 
 # Ajouter des utilisateurs pré-créés et générer leurs dossiers
-populate: $(UTILISATEURS_FILE) $(PLAYERS_DIR)
+database: $(UTILISATEURS_FILE) $(PLAYERS_DIR)
 	@echo "Ajout d'utilisateurs prédéfinis dans $(UTILISATEURS_FILE)..."
 	@echo "" > $(UTILISATEURS_FILE) # Réinitialiser le fichier
 	@for user in $(USERS); do \
@@ -55,8 +55,35 @@ populate: $(UTILISATEURS_FILE) $(PLAYERS_DIR)
 	    echo "Bio de $$username" > $(PLAYERS_DIR)/$$username/bio; \
 	    echo "Deuxième ligne de bio pour $$username" >> $(PLAYERS_DIR)/$$username/bio; \
 	    touch $(PLAYERS_DIR)/$$username/friends; \
+	    if [ "$$username" = "player1" ]; then \
+	        echo "matches:10" > $(PLAYERS_DIR)/$$username/statistics; \
+	        echo "wins:6" >> $(PLAYERS_DIR)/$$username/statistics; \
+	        echo "losses:4" >> $(PLAYERS_DIR)/$$username/statistics; \
+	    elif [ "$$username" = "player2" ]; then \
+	        echo "matches:15" > $(PLAYERS_DIR)/$$username/statistics; \
+	        echo "wins:10" >> $(PLAYERS_DIR)/$$username/statistics; \
+	        echo "losses:5" >> $(PLAYERS_DIR)/$$username/statistics; \
+	    elif [ "$$username" = "player3" ]; then \
+	        echo "matches:5" > $(PLAYERS_DIR)/$$username/statistics; \
+	        echo "wins:2" >> $(PLAYERS_DIR)/$$username/statistics; \
+	        echo "losses:3" >> $(PLAYERS_DIR)/$$username/statistics; \
+	    else \
+	        echo "matches:0" > $(PLAYERS_DIR)/$$username/statistics; \
+	        echo "wins:0" >> $(PLAYERS_DIR)/$$username/statistics; \
+	        echo "losses:0" >> $(PLAYERS_DIR)/$$username/statistics; \
+	    fi; \
 	done < $(UTILISATEURS_FILE)
+	@if [ -f $(PLAYERS_DIR)/bio ]; then \
+	    rm -f $(PLAYERS_DIR)/bio; \
+	fi
+	@if [ -f $(PLAYERS_DIR)/friends ]; then \
+	    rm -f $(PLAYERS_DIR)/friends; \
+	fi
+	@if [ -f $(PLAYERS_DIR)/statistics ]; then \
+	    rm -f $(PLAYERS_DIR)/statistics; \
+	fi
 	@echo "Les utilisateurs et dossiers ont été créés avec succès."
+
 
 # Nettoyage
 clean:
@@ -71,4 +98,4 @@ clean:
 	fi
 
 # Phony targets
-.PHONY: all clean populate
+.PHONY: all clean database
