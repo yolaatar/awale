@@ -258,6 +258,7 @@ void envoyerAide(Utilisateur *utilisateur) {
     write_client(utilisateur->sock, "/accept - Accepter un défi.\n");
     write_client(utilisateur->sock, "/decline - Refuser un défi.\n");
     write_client(utilisateur->sock, "/play [case] - Jouer sur une case.\n");
+    write_client(utilisateur->sock, "/ff - Abandonner la partie.\n");
     write_client(utilisateur->sock, "/addfriend [username] - Ajouter un ami.\n");
     write_client(utilisateur->sock, "/faccept [username] - Accepter une demande d'ami.\n");
     write_client(utilisateur->sock, "/fdecline [username] - Refuser une demande d'ami.\n");
@@ -968,6 +969,34 @@ void traiter_friendrequest(Utilisateur *utilisateur)
     }
 }
 
+void traiter_ff(Utilisateur *utilisateur)
+{
+    if (utilisateur->partieEnCours == NULL || utilisateur->estEnJeu != 1)
+    {
+        write_client(utilisateur->sock, "Erreur : Vous n'êtes pas en jeu.\n");
+        return;
+    }
+
+    Salon *salon = utilisateur->partieEnCours;
+    Utilisateur *adversaire = (salon->joueur1 == utilisateur) ? salon->joueur2 : salon->joueur1;
+
+    // Notifier les joueurs
+    write_client(utilisateur->sock, "Vous avez abandonné la partie. Défaite enregistrée.\n");
+    write_client(adversaire->sock, "Votre adversaire a abandonné la partie. Victoire enregistrée.\n");
+
+    // Mettre à jour les statistiques
+    mettre_a_jour_statistiques(utilisateur->username, 1, 0, 1); // Défaite pour l'utilisateur
+    mettre_a_jour_statistiques(adversaire->username, 1, 1, 0); // Victoire pour l'adversaire
+
+    // Réinitialiser l'état des joueurs et du salon
+    utilisateur->estEnJeu = 0;
+    adversaire->estEnJeu = 0;
+    utilisateur->partieEnCours = NULL;
+    adversaire->partieEnCours = NULL;
+    salon->statut = 2; // Partie terminée
+}
+
+
 void traiterMessage(Utilisateur *utilisateur, char *message)
 {
     if (utilisateur->isConnected)
@@ -1198,6 +1227,17 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
             traiter_search(utilisateur, utilisateur->username);
             // Afficher mon profil
         }
+        else if ((strcmp(message, "/ff") == 0) && utilisateur->estEnJeu)
+        {
+            traiter_ff(utilisateur);
+            // traiter_search(utilisateur, utilisateur->username);
+            // Afficher mon profil
+        }
+        else if ((strcmp(message, "/ff") == 0) && !utilisateur->estEnJeu)
+        {
+            write_client(utilisateur->sock, "Vous devez être en partie pour executer cette commande !\n");
+           
+        }
         else
         {
             envoyerMessagePublic(utilisateur, message);
@@ -1316,15 +1356,19 @@ static void app(void)
             {
                 int n = read_client(utilisateur->sock, buffer);
                 if (n == 0 || utilisateur->sock == INVALID_SOCKET)
-                { // Déconnexion du client
+                {
                     printf("Déconnexion de l'utilisateur : %s\n", utilisateur->username);
 
-                    // Réinitialiser isConnected et d'autres champs utilisateur
+                    if (utilisateur->estEnJeu && utilisateur->partieEnCours != NULL)
+                    {
+                        traiter_ff(utilisateur); // Appeler traiter_ff pour enregistrer l'abandon
+                    }
+
+                    // Réinitialiser les états
                     utilisateur->isConnected = 0;
                     memset(utilisateur->username, 0, sizeof(utilisateur->username));
                     memset(utilisateur->pseudo, 0, sizeof(utilisateur->pseudo));
 
-                    // Fermer la connexion et réorganiser la liste
                     closesocket(utilisateur->sock);
                     utilisateur->sock = INVALID_SOCKET;
 
@@ -1333,8 +1377,9 @@ static void app(void)
                         utilisateurs[j] = utilisateurs[j + 1];
                     }
                     nbUtilisateursConnectes--;
-                    i--; // Réajuster l'index pour ne pas sauter un utilisateur
+                    i--;
                 }
+
 
                 else
                 {

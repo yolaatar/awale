@@ -77,6 +77,7 @@ Le fichier Makefile inclut plusieurs règles pour faciliter la compilation et la
    - `/accept` : Accepter un défi.
    - `/decline` : Refuser un défi.
    - `/play [case]` : Jouer un coup pendant une partie.
+   - `/ff` : Abandonner la partie.
    - `/list` : Afficher la liste des joueurs connectés.
    - `/search [username]` : Rechercher les informations d'un joueur (bio et statistiques).
    - `/profile` : Afficher vos propres informations (profil).
