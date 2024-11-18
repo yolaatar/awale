@@ -18,13 +18,13 @@ typedef struct {
     Plateau plateau;
     Joueur joueur1;
     Joueur joueur2;
-    Plateau historique[100];
+    Plateau historique[500];
 } Partie;
 
 int initialiserPartie(Partie *partie) {
     
     for (int i = 0; i < 12; i++) {
-        partie->plateau.cases[i].nbGraines = 2;
+        partie->plateau.cases[i].nbGraines = 4;
     }
 
     // Plateau plateauTest = {
@@ -201,39 +201,64 @@ int peutForcerCapture(Partie *partie, int joueur) {
 
 
 int verifierFinPartie(Partie *partie) {
-    // Vérifie si un joueur a plus de 24 points, ce qui signifie qu'il a gagné
+    int totalGraines = 0;
+    for (int i = 0; i < 12; i++) {
+        totalGraines += partie->plateau.cases[i].nbGraines;
+    }
+
+    // Vérifie si un joueur a plus de 24 points
     if (partie->joueur1.score > 24 || partie->joueur2.score > 24) {
+        printf("Fin de la partie : un joueur a plus de 24 points.\n");
         return 1;
     }
 
-    // Vérifie si l'un des joueurs est en famine et si l'adversaire peut le nourrir
+    // Vérifie la famine
     if (nombreGrainesRestantesJoueur(partie, 1) == 0) {
         if (!peutNourrirAdversaire(partie, 1)) {
-            //On distribue les graines restantes au joueur qui joue 
             for (int i = 6; i < 12; i++) {
                 partie->joueur2.score += partie->plateau.cases[i].nbGraines;
                 partie->plateau.cases[i].nbGraines = 0;
             }
-            return 1; // Le joueur 1 est en famine et ne peut pas être nourri
+            printf("Fin de la partie : le joueur 1 est en famine et ne peut pas être nourri.\n");
+            return 1;
         }
     } else if (nombreGrainesRestantesJoueur(partie, 2) == 0) {
         if (!peutNourrirAdversaire(partie, 2)) {
-            //On distribue les graines restantes au joueur qui joue
             for (int i = 0; i < 6; i++) {
                 partie->joueur1.score += partie->plateau.cases[i].nbGraines;
                 partie->plateau.cases[i].nbGraines = 0;
             }
-            return 1; // Le joueur 2 est en famine et ne peut pas être nourri
+            printf("Fin de la partie : le joueur 2 est en famine et ne peut pas être nourri.\n");
+            return 1;
         }
+    }
+
+    // Fin de partie par indétermination si le nombre total de graines est très faible (2 ou 3)
+    if (totalGraines <= 3) {
+        printf("Fin de la partie par indétermination : trop peu de graines pour capturer.\n");
+        
+        // Chaque joueur récupère les graines restantes dans son camp
+        for (int i = 0; i < 6; i++) {
+            partie->joueur1.score += partie->plateau.cases[i].nbGraines;
+            partie->plateau.cases[i].nbGraines = 0;
+        }
+        for (int i = 6; i < 12; i++) {
+            partie->joueur2.score += partie->plateau.cases[i].nbGraines;
+            partie->plateau.cases[i].nbGraines = 0;
+        }
+
+        return 1; // La partie se termine
     }
 
     // Vérifie si aucun joueur ne peut forcer une capture
     if (!peutForcerCapture(partie, 1) && !peutForcerCapture(partie, 2)) {
+        printf("Fin de la partie : aucun joueur ne peut forcer une capture.\n");
         return 1; // Aucun joueur ne peut forcer une capture, la partie se termine
     }
 
     return 0; // La partie peut continuer
 }
+
 
 // int main() {
 //     Partie partie;

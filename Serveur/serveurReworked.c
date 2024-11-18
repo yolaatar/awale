@@ -31,7 +31,7 @@ struct Utilisateur
     char pseudo[20];
     char username[50];
     char password[50];
-    int estEnJeu;         // 1 si en jeu, 0 sinon
+    int estEnJeu;         // 1 si en jeu, 0 si il ne l'est pas et 2 si il a déjà lancé un défi
     int isConnected;      // 1 si connecté, 0 sinon
     Salon *partieEnCours; // NULL si le joueur n'est pas en jeu
     Joueur *joueur;       // Pointeur vers le joueur (Joueur1 ou Joueur2) dans une partie
@@ -110,9 +110,7 @@ void envoyer_plateau_aux_users(Utilisateur *joueur1, Utilisateur *joueur2, Parti
     char buffer[BUF_SIZE];
 
     // Préparation de l'affichage du plateau
-
-    printf("Pseudo : %s\n",partie->joueur1.pseudo );
-
+    snprintf(buffer, BUF_SIZE, "  ---------------------------------\n");
     strncat(buffer, "  ---------------------------------\n", BUF_SIZE - strlen(buffer) - 1);
     snprintf(buffer, BUF_SIZE, "\n  Joueur 1 : %s, Score : %d\n",
              partie->joueur1.pseudo, partie->joueur1.score);
@@ -145,6 +143,18 @@ void envoyer_plateau_aux_users(Utilisateur *joueur1, Utilisateur *joueur2, Parti
     // Envoi du plateau aux deux joueurs
     write_client(joueur1->sock, buffer);
     write_client(joueur2->sock, buffer);
+
+    // Envoyer a qui c'est le tour de jouer
+    if (partie->tourActuel == 0)
+    {
+        write_client(joueur1->sock, "C'est votre tour de jouer.\n");
+        write_client(joueur2->sock, "C'est le tour de votre adversaire.\n");
+    }
+    else
+    {
+        write_client(joueur1->sock, "C'est le tour de votre adversaire.\n");
+        write_client(joueur2->sock, "C'est votre tour de jouer.\n");
+    }
 }
 
 void creerSalon(Utilisateur *joueur1, Utilisateur *joueur2)
@@ -152,9 +162,9 @@ void creerSalon(Utilisateur *joueur1, Utilisateur *joueur2)
     if (nbSalons >= MAX_SALONS)
     {
         printf("Nombre maximal de salons atteint.\n");
+
         return;
     }
-
 
     Salon *salon = &salons[nbSalons++];
     salon->joueur1 = joueur1;
@@ -163,10 +173,6 @@ void creerSalon(Utilisateur *joueur1, Utilisateur *joueur2)
     strcpy(salon->partie.joueur2.pseudo, joueur2->username);
     salon->tourActuel = 0;
     salon->statut = 1;
-
-    printf("blablablab1 : %s\n",salon->partie.joueur1.pseudo);
-    printf("blablablab2 : %s\n",salon->partie.joueur2.pseudo);
-
 
     initialiserPartie(&salon->partie);
     joueur1->estEnJeu = 1;
@@ -194,6 +200,27 @@ void terminerPartie(Salon *salon)
     salon->statut = 2;
     salon->joueur1->estEnJeu = 0;
     salon->joueur2->estEnJeu = 0;
+    salon->joueur1->partieEnCours = NULL;
+    salon->joueur2->partieEnCours = NULL;
+    salon->joueur1->challenger = NULL;
+    salon->joueur2->challenger = NULL;
+
+    if (salon->partie.joueur1.score > salon->partie.joueur2.score)
+    {
+        write_client(salon->joueur1->sock, "Vous avez gagné !\n");
+        write_client(salon->joueur2->sock, "Vous avez perdu.\n");
+    }
+    else if (salon->partie.joueur1.score < salon->partie.joueur2.score)
+    {
+        write_client(salon->joueur1->sock, "Vous avez perdu.\n");
+        write_client(salon->joueur2->sock, "Vous avez gagné !\n");
+    }
+    else
+    {
+        write_client(salon->joueur1->sock, "Match nul !\n");
+        write_client(salon->joueur2->sock, "Match nul !\n");
+    }
+
     write_client(salon->joueur1->sock, "La partie est terminée.\n");
     write_client(salon->joueur2->sock, "La partie est terminée.\n");
 }
@@ -227,7 +254,7 @@ void playCoup(Salon *salon, Utilisateur *joueur, int caseJouee)
         return;
     }
 
-    if (jouerCoup(partie, caseJouee, joueurIndex + 1) == 0)
+    else if (jouerCoup(partie, caseJouee, joueurIndex + 1) == 0)
     {
         envoyer_plateau_aux_users(salon->joueur1, salon->joueur2, partie);
         salon->tourActuel = 1 - salon->tourActuel;
@@ -667,39 +694,284 @@ void traiter_fdecline(Utilisateur *utilisateur, const char *friend_username)
     }
 }
 
+int save_bio_to_file(const char *username, const char *bio)
+{
+    char bio_file[150];
+    snprintf(bio_file, sizeof(bio_file), "Serveur/players/%s/bio", username);
+
+    FILE *file = fopen(bio_file, "w");
+    if (file == NULL)
+    {
+        perror("Erreur lors de l'ouverture du fichier bio");
+        return 0;
+    }
+
+    fprintf(file, "%s", bio);
+    fclose(file);
+    return 1;
+}
+
+void traiter_bio(Utilisateur *utilisateur)
+{
+    write_client(utilisateur->sock, "Entrer votre bio (max 10 lignes). Tapez /savebio pour enregistrer :\n");
+    char bio[1024] = "";
+    char line[128];
+    int line_count = 0;
+    while (line_count < 10)
+    {
+        int n = read_client(utilisateur->sock, line);
+        line[strcspn(line, "\r\n")] = '\0'; // Remove trailing newline
+
+        if (n <= 0 || strcmp(line, "/savebio") == 0)
+        {
+            break;
+        }
+
+        if (strlen(line) > 0)
+        {
+            strncat(bio, line, sizeof(bio) - strlen(bio) - 1);
+            strncat(bio, "\n", sizeof(bio) - strlen(bio) - 1);
+            line_count++;
+        }
+    }
+
+    if (save_bio_to_file(utilisateur->username, bio))
+    {
+        write_client(utilisateur->sock, "Biographie enregistrée avec succès.\n");
+    }
+    else
+    {
+        write_client(utilisateur->sock, "Erreur lors de l'enregistrement de la biographie.\n");
+    }
+}
+
+void get_user_bio(const char *username, char *bio, size_t bio_size)
+{
+    char bio_file[150];
+    snprintf(bio_file, sizeof(bio_file), "Serveur/players/%s/bio", username);
+
+    FILE *file = fopen(bio_file, "r");
+    if (file)
+    {
+        fread(bio, 1, bio_size - 1, file);
+        bio[bio_size - 1] = '\0'; // Ensure null termination
+        fclose(file);
+    }
+    else
+    {
+        snprintf(bio, bio_size, "Non renseignée"); // Default message if bio not found
+    }
+}
+
+void traiter_search(Utilisateur *utilisateur, const char *search_username)
+{
+    if (!verifier_username(search_username))
+    {
+        write_client(utilisateur->sock, "Utilisateur introuvable.\n");
+        return;
+    }
+
+    // Retrieve user bio
+    char bio[1024];
+    get_user_bio(search_username, bio, sizeof(bio));
+
+    // Format and send the user's information
+    char info[BUF_SIZE];
+    snprintf(info, sizeof(info),
+             "Informations sur %s :\n- Bio : %s\n- Victoires : 0\n- Défaites : 0\n",
+             search_username, bio);
+    write_client(utilisateur->sock, info);
+}
+
+void lire_relations(const char *friend_file, const char *prefix, char *output, size_t output_size)
+{
+    FILE *file = fopen(friend_file, "r");
+    if (!file)
+    {
+        perror("Erreur lors de l'ouverture du fichier d'amis");
+        snprintf(output, output_size, "Erreur : Impossible d'accéder aux informations d'amis.\n");
+        return;
+    }
+
+    char line[256];
+    output[0] = '\0'; // Initialize output to an empty string
+
+    while (fgets(line, sizeof(line), file))
+    {
+        if (strncmp(line, prefix, strlen(prefix)) == 0)
+        {
+            strncat(output, line + strlen(prefix), output_size - strlen(output) - 1);
+        }
+    }
+
+    fclose(file);
+}
+
+void traiter_friends(Utilisateur *utilisateur)
+{
+    char friend_file[150];
+    snprintf(friend_file, sizeof(friend_file), "Serveur/players/%s/friends", utilisateur->username);
+
+    char output[BUF_SIZE];
+    lire_relations(friend_file, "friend:", output, sizeof(output));
+
+    if (strlen(output) > 0)
+    {
+        write_client(utilisateur->sock, "Vos amis :\n");
+        write_client(utilisateur->sock, output);
+    }
+    else
+    {
+        write_client(utilisateur->sock, "Vous n'avez aucun ami.\n");
+    }
+}
+
+void traiter_friendrequest(Utilisateur *utilisateur)
+{
+    char friend_file[150];
+    snprintf(friend_file, sizeof(friend_file), "Serveur/players/%s/friends", utilisateur->username);
+
+    char output[BUF_SIZE];
+    output[0] = '\0';
+
+    // Read friend requests with "request:" prefix
+    lire_relations(friend_file, "request:", output, sizeof(output));
+
+    if (strlen(output) > 0)
+    {
+        write_client(utilisateur->sock, "Demandes d'amis reçues :\n");
+        write_client(utilisateur->sock, output);
+    }
+    else
+    {
+        write_client(utilisateur->sock, "Vous n'avez aucune demande d'ami.\n");
+    }
+}
+
 void traiterMessage(Utilisateur *utilisateur, char *message)
 {
-    
-
-    if (utilisateur->isConnected){
+    if (utilisateur->isConnected)
+    {
         if (strncmp(message, "/challenge ", 11) == 0)
         {
             char *username = message + 11;
             Utilisateur *adversaire = trouverUtilisateurParUsername(username);
-            if (adversaire != NULL && adversaire->estEnJeu == 0)
+
+            // Vérifier si l'utilisateur tente de se défier lui-même
+            if (adversaire == utilisateur)
             {
-                adversaire->challenger = utilisateur; // Set pending challenge
-                write_client(adversaire->sock, "Vous avez reçu un défi ! Tapez /accept pour accepter ou /decline pour refuser.\n");
-                write_client(utilisateur->sock, "Défi envoyé ! En attente de réponse.\n");
+                write_client(utilisateur->sock, "Vous ne pouvez pas vous défier vous-même.\n");
+                return;
+            }
+
+            // Vérifier les différents états pour éviter des défis multiples
+            if (utilisateur->estEnJeu == 1)
+            {
+                write_client(utilisateur->sock, "Vous êtes déjà en jeu.\n");
+            }
+            else if (utilisateur->estEnJeu == 2)
+            {
+                write_client(utilisateur->sock, "Vous avez déjà lancé un défi. Utilisez /decline pour l'annuler.\n");
+            }
+            else if (adversaire == NULL)
+            {
+                write_client(utilisateur->sock, "Joueur introuvable.\n");
+            }
+            else if (adversaire->estEnJeu == 1)
+            {
+                write_client(utilisateur->sock, "Ce joueur est déjà en jeu.\n");
+            }
+            else if (adversaire->challenger != NULL)
+            {
+                write_client(utilisateur->sock, "Ce joueur a déjà un défi en attente.\n");
             }
             else
             {
+                // Définir le défi en attente
+                adversaire->challenger = utilisateur;
+                utilisateur->challenger = adversaire;
+                utilisateur->estEnJeu = 2;
+                adversaire->estEnJeu = 3;
 
-                write_client(utilisateur->sock, "Joueur non disponible.\n");
+                // Informer les deux joueurs
+                char buffer[BUF_SIZE];
+                snprintf(buffer, BUF_SIZE, "Vous avez reçu un défi de la part de %s ! Tapez /accept pour accepter ou /decline pour refuser.\n", utilisateur->username);
+                write_client(adversaire->sock, buffer);
+                write_client(utilisateur->sock, "Défi envoyé ! En attente de réponse.\n");
             }
         }
-        else if (strcmp(message, "/accept") == 0 && utilisateur->challenger)
+        else if (strcmp(message, "/accept") == 0)
         {
+            if (utilisateur->challenger == NULL)
+            {
+                write_client(utilisateur->sock, "Erreur : Vous n'avez pas de défi à accepter.\n");
+                return;
+            }
             Utilisateur *challenger = utilisateur->challenger;
-            creerSalon(challenger, utilisateur); // Create game if challenge is accepted
-            utilisateur->challenger = NULL;      // Clear challenge
-            challenger->challenger = NULL;
+
+            if (utilisateur->estEnJeu == 1)
+            {
+                write_client(utilisateur->sock, "Vous êtes déjà en jeu.\n");
+            }
+            else if (challenger->estEnJeu == 1)
+            {
+                write_client(utilisateur->sock, "Votre adversaire est déjà en jeu.\n");
+            }
+            else
+            {
+                // Créer un salon pour la partie
+                creerSalon(challenger, utilisateur);
+
+                // Nettoyer les états de défi pour les deux utilisateurs
+                utilisateur->challenger = NULL;
+                challenger->challenger = NULL;
+                utilisateur->estEnJeu = 1;
+                challenger->estEnJeu = 1;
+            }
         }
-        else if (strcmp(message, "/decline") == 0 && utilisateur->challenger)
+        else if (strcmp(message, "/decline") == 0)
         {
-            write_client(utilisateur->challenger->sock, "Défi refusé.\n");
-            write_client(utilisateur->sock, "Défi refusé.\n");
-            utilisateur->challenger = NULL; // Clear challenge
+            // Check if the user has a challenge
+            if (utilisateur->challenger == NULL)
+            {
+                write_client(utilisateur->sock, "Erreur : Vous n'avez pas de défi à refuser.\n");
+                return;
+            }
+
+            // Only the inviter (estEnJeu = 2) can cancel the challenge
+            if (utilisateur->estEnJeu == 2)
+            {
+                Utilisateur *adversaire = utilisateur->challenger;
+
+                // Reset challenge states
+                utilisateur->estEnJeu = 0;
+                adversaire->estEnJeu = 0;
+
+                // Inform both users
+                write_client(utilisateur->sock, "Défi annulé.\n");
+                char buffer[BUF_SIZE];
+                snprintf(buffer, BUF_SIZE, "Votre défi a été annulé par %s.\n", utilisateur->username);
+                write_client(adversaire->sock, buffer);
+
+                // Clear challenge references
+                utilisateur->challenger = NULL;
+                adversaire->challenger = NULL;
+            }
+            else if (utilisateur->estEnJeu == 3)
+            {
+                write_client(utilisateur->sock, "Défi refusé.\n");
+                char buffer[BUF_SIZE];
+                snprintf(buffer, BUF_SIZE, "Votre défi a été refusé par %s.\n", utilisateur->username);
+                write_client(utilisateur->challenger->sock, buffer);
+
+                // Reset challenge states
+                utilisateur->estEnJeu = 0;
+                utilisateur->challenger->estEnJeu = 0;
+
+                // Clear challenge references
+                utilisateur->challenger->challenger = NULL;
+                utilisateur->challenger = NULL;
+            }
         }
         else if (strncmp(message, "/play ", 6) == 0 && utilisateur->estEnJeu)
         {
@@ -717,6 +989,22 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
             }
             write_client(utilisateur->sock, buffer);
         }
+        else if (strcmp(message, "/friendrequest") == 0)
+        {
+            traiter_friendrequest(utilisateur);
+        }
+        else if (strncmp(message, "/search ", 7) == 0)
+        {
+            char search_username[50];
+            if (sscanf(message + 8, "%49s", search_username) == 1)
+            {
+                traiter_search(utilisateur, search_username);
+            }
+            else
+            {
+                write_client(utilisateur->sock, "Format incorrect. Utilisez : /search [username]\n");
+            }
+        }
         else if (strcmp(message, "/help") == 0)
         {
             envoyerAide(utilisateur);
@@ -733,10 +1021,9 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
         {
             traiter_logout(utilisateur);
         }
-        else if (strncmp(message, "/bio ", 5) == 0)
+        else if (strncmp(message, "/bio", 4) == 0)
         {
-            // Bio functionality
-            // Retrieve or save bio based on input
+            traiter_bio(utilisateur);
         }
         else if (strncmp(message, "/addfriend ", 11) == 0)
         {
@@ -752,7 +1039,7 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
         }
         else if (strcmp(message, "/friends") == 0)
         {
-            // Show friend list functionality
+            traiter_friends(utilisateur);
         }
         else if (strncmp(message, "/faccept ", 9) == 0)
         {
@@ -778,10 +1065,12 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
                 write_client(utilisateur->sock, "Format incorrect. Utilisez : /fdecline [username]\n");
             }
         }
-        else if (strcmp(message, "/private") == 0){
+        else if (strcmp(message, "/private") == 0)
+        {
             // MODE PRIVÉ
         }
-        else if (strcmp(message, "/public") == 0){
+        else if (strcmp(message, "/public") == 0)
+        {
             // MODE PUBLIC
         }
         else
@@ -789,7 +1078,8 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
             envoyerMessagePublic(utilisateur, message);
         }
     }
-    else if (!utilisateur->isConnected){
+    else if (!utilisateur->isConnected)
+    {
         if (strncmp(message, "/login ", 7) == 0)
         {
             char username[50], password[50];
@@ -814,10 +1104,8 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
                 write_client(utilisateur->sock, "Format incorrect. Utilisez : /signin [username] [password]\n");
             }
         }
-        else{
-            char buffer[BUF_SIZE] = {0};
-            snprintf(buffer, BUF_SIZE, "%s\n", utilisateur->isConnected);
-            write_client(utilisateur->sock, buffer);
+        else
+        {
             write_client(utilisateur->sock, "Vous devez être connecté pour utiliser cette commande !\n");
         }
     }

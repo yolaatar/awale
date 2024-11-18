@@ -195,12 +195,6 @@ int lire_bio(const char *username, char *buffer, size_t buffer_size)
     return 1;
 }
 
-// Fonction pour envoyer le menu principal aux clients
-void envoyer_menu_principal(Client *client)
-{
-    const char *menu = "Menu principal :\n1 - Afficher 'A'\n2 - Se mettre prêt\nEntrez votre choix : ";
-    write_client(client->sock, menu);
-}
 
 // Fonction pour vérifier les identifiants dans le fichier
 int verifier_identifiants(const char *username, const char *password)

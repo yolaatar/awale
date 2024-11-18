@@ -18,7 +18,7 @@ typedef struct {
     Plateau plateau;
     Joueur joueur1;
     Joueur joueur2;
-    Plateau historique[100];
+    Plateau historique[500];
 } Partie;
 
 int initialiserPartie(Partie *partie) {
