@@ -16,7 +16,6 @@
 // Déclaration anticipée de Utilisateur
 typedef struct Utilisateur Utilisateur;
 
-
 typedef struct
 {
     Utilisateur *joueur1;
@@ -27,7 +26,6 @@ typedef struct
     Utilisateur *spectateurs[MAX_SPECTATEURS];
     int nbSpectateurs;
 } Salon;
-
 
 struct Utilisateur
 {
@@ -63,7 +61,6 @@ static void end(void)
 #endif
 }
 
-
 Utilisateur *queue[MAX_QUEUE];
 int queueSize = 0;
 Salon salons[MAX_SALONS];
@@ -73,7 +70,6 @@ int nbSalons = 0;
 
 void mettre_a_jour_statistiques(const char *username, int match_increment, int win_increment, int loss_increment);
 void envoyer_plateau_spectateur(Utilisateur *spectateur, Partie *partie);
-
 
 void initialiserUtilisateurs(void)
 {
@@ -169,7 +165,6 @@ void envoyer_plateau_aux_users(Utilisateur *joueur1, Utilisateur *joueur2, Parti
     }
 }
 
-
 void creerSalon(Utilisateur *joueur1, Utilisateur *joueur2)
 {
     if (nbSalons >= MAX_SALONS)
@@ -197,8 +192,7 @@ void creerSalon(Utilisateur *joueur1, Utilisateur *joueur2)
         strcpy(salon->partie.joueur1.pseudo, joueur1->username);
         salon->joueur2 = joueur2;
         strcpy(salon->partie.joueur2.pseudo, joueur2->username);
-    salon->tourActuel = 0;
-        
+        salon->tourActuel = 0;
     }
     salon->statut = 1;
     int tour = salon->tourActuel;
@@ -262,8 +256,8 @@ void terminerPartie(Salon *salon)
     }
 }
 
-
-void envoyerAide(Utilisateur *utilisateur) {
+void envoyerAide(Utilisateur *utilisateur)
+{
     write_client(utilisateur->sock, "Commandes disponibles :\n");
     write_client(utilisateur->sock, "/login [username] [password] - Se connecter.\n");
     write_client(utilisateur->sock, "/signin [username] [password] - Créer un compte.\n");
@@ -286,7 +280,6 @@ void envoyerAide(Utilisateur *utilisateur) {
     write_client(utilisateur->sock, "/friendrequest - Voir vos demandes d'amis en attente.\n");
     write_client(utilisateur->sock, "/bio - Modifier votre bio.\n");
 }
-
 
 void envoyerMessagePublic(Utilisateur *expediteur, const char *message)
 {
@@ -313,7 +306,7 @@ void playCoup(Salon *salon, Utilisateur *joueur, int caseJouee)
     {
         salon->tourActuel = (salon->tourActuel + 1) % 2;
         int tour = salon->tourActuel;
-        envoyer_plateau_aux_users(salon->joueur1, salon->joueur2, partie, tour);  
+        envoyer_plateau_aux_users(salon->joueur1, salon->joueur2, partie, tour);
     }
     else
     {
@@ -500,7 +493,6 @@ int ajouter_utilisateur(const char *username, const char *password)
     {
         perror("Erreur lors de la création du fichier statistiques");
     }
-
 
     return 1; // Inscription réussie
 }
@@ -817,7 +809,6 @@ void mettre_a_jour_statistiques(const char *username, int match_increment, int w
     }
 }
 
-
 int save_bio_to_file(const char *username, const char *bio)
 {
     char bio_file[150];
@@ -893,7 +884,6 @@ void get_user_bio(const char *username, char *bio, size_t bio_size)
     }
 }
 
-
 void traiter_search(Utilisateur *utilisateur, const char *search_username)
 {
     if (!verifier_username(search_username))
@@ -917,7 +907,6 @@ void traiter_search(Utilisateur *utilisateur, const char *search_username)
              search_username, bio, matches, wins, losses);
     write_client(utilisateur->sock, info);
 }
-
 
 void lire_relations(const char *friend_file, const char *prefix, char *output, size_t output_size)
 {
@@ -1001,7 +990,7 @@ void traiter_ff(Utilisateur *utilisateur)
 
     // Mettre à jour les statistiques
     mettre_a_jour_statistiques(utilisateur->username, 1, 0, 1); // Défaite pour l'utilisateur
-    mettre_a_jour_statistiques(adversaire->username, 1, 1, 0); // Victoire pour l'adversaire
+    mettre_a_jour_statistiques(adversaire->username, 1, 1, 0);  // Victoire pour l'adversaire
 
     // Réinitialiser l'état des joueurs et du salon
     utilisateur->estEnJeu = 0;
@@ -1022,11 +1011,10 @@ void ajouter_spectateur_salon(Salon *salon, Utilisateur *spectateur)
     salon->spectateurs[salon->nbSpectateurs++] = spectateur;
 }
 
-
 void traiter_watch(Utilisateur *spectateur, const char *search_username)
 {
     // Trouver l'utilisateur à observer
-    printf("pseudo du joueur que je voeux regarer : %s\n",search_username);
+    printf("pseudo du joueur que je voeux regarer : %s\n", search_username);
     Utilisateur *joueur = trouverUtilisateurParUsername(search_username);
 
     if (joueur == NULL)
@@ -1053,13 +1041,16 @@ void traiter_watch(Utilisateur *spectateur, const char *search_username)
     ajouter_spectateur_salon(salon, spectateur);
 }
 
-void startMatchmakingGame() {
-    if (queueSize >= 2) {
+void startMatchmakingGame()
+{
+    if (queueSize >= 2)
+    {
         Utilisateur *player1 = queue[0];
         Utilisateur *player2 = queue[1];
 
         // Remove players from the queue
-        for (int i = 2; i < queueSize; i++) {
+        for (int i = 2; i < queueSize; i++)
+        {
             queue[i - 2] = queue[i];
         }
         queueSize -= 2;
@@ -1072,56 +1063,70 @@ void startMatchmakingGame() {
     }
 }
 
-void joinQueue(Utilisateur *utilisateur) {
-    if (utilisateur->estEnJeu != 0) {
+void joinQueue(Utilisateur *utilisateur)
+{
+    if (utilisateur->estEnJeu != 0)
+    {
         write_client(utilisateur->sock, "Vous ne pouvez pas rejoindre la file d'attente en étant en jeu.\n");
         return;
     }
 
-    for (int i = 0; i < queueSize; i++) {
-        if (queue[i] == utilisateur) {
+    for (int i = 0; i < queueSize; i++)
+    {
+        if (queue[i] == utilisateur)
+        {
             write_client(utilisateur->sock, "Vous êtes déjà dans la file d'attente.\n");
             return;
         }
     }
 
-    if (queueSize < MAX_QUEUE) {
+    if (queueSize < MAX_QUEUE)
+    {
         queue[queueSize++] = utilisateur;
         utilisateur->estEnJeu = 4; // Set a special state to indicate they're in the queue
         write_client(utilisateur->sock, "Vous avez rejoint la file d'attente pour un match.\n");
 
         // Check if we can start a game
-        if (queueSize >= 2) {
+        if (queueSize >= 2)
+        {
             startMatchmakingGame();
         }
-    } else {
+    }
+    else
+    {
         write_client(utilisateur->sock, "La file d'attente est pleine.\n");
     }
 }
 
 // Function to remove a player from the queue
-void leaveQueue(Utilisateur *utilisateur) {
+void leaveQueue(Utilisateur *utilisateur)
+{
     int found = -1;
-    for (int i = 0; i < queueSize; i++) {
-        if (queue[i] == utilisateur) {
+    for (int i = 0; i < queueSize; i++)
+    {
+        if (queue[i] == utilisateur)
+        {
             found = i;
             break;
         }
     }
 
-    if (found != -1) {
+    if (found != -1)
+    {
         // Shift players down in the queue
-        for (int i = found; i < queueSize - 1; i++) {
+        for (int i = found; i < queueSize - 1; i++)
+        {
             queue[i] = queue[i + 1];
         }
         queueSize--;
         utilisateur->estEnJeu = 0; // Reset state to not in game
         write_client(utilisateur->sock, "Vous avez quitté la file d'attente.\n");
-    } else {
+    }
+    else
+    {
         write_client(utilisateur->sock, "Vous n'êtes pas dans la file d'attente.\n");
     }
 }
-
 
 void traiterMessage(Utilisateur *utilisateur, char *message)
 {
@@ -1370,7 +1375,6 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
         else if ((strcmp(message, "/ff") == 0) && !utilisateur->estEnJeu)
         {
             write_client(utilisateur->sock, "Vous devez être en partie pour executer cette commande !\n");
-           
         }
         else if (strncmp(message, "/watch ", 7) == 0) // Comparer 7 caractères ("/watch ")
         {
@@ -1526,7 +1530,6 @@ static void app(void)
                     nbUtilisateursConnectes--;
                     i--;
                 }
-
 
                 else
                 {
