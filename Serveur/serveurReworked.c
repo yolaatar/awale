@@ -150,13 +150,13 @@ void envoyer_plateau_aux_users(Utilisateur *joueur1, Utilisateur *joueur2, Parti
     // Envoyer a qui c'est le tour de jouer
     if (partie->tourActuel == 0)
     {
-        write_client(joueur1->sock, "C'est votre tour de jouer.\n");
+        write_client(joueur1->sock, "C'est à votre tour de jouer.\n");
         write_client(joueur2->sock, "C'est le tour de votre adversaire.\n");
     }
     else
     {
         write_client(joueur1->sock, "C'est le tour de votre adversaire.\n");
-        write_client(joueur2->sock, "C'est votre tour de jouer.\n");
+        write_client(joueur2->sock, "C'est à votre tour de jouer.\n");
     }
 }
 
@@ -170,10 +170,21 @@ void creerSalon(Utilisateur *joueur1, Utilisateur *joueur2)
     }
 
     Salon *salon = &salons[nbSalons++];
-    salon->joueur1 = joueur1;
-    strcpy(salon->partie.joueur1.pseudo, joueur1->username);
-    salon->joueur2 = joueur2;
-    strcpy(salon->partie.joueur2.pseudo, joueur2->username);
+    // tirer au sort qui sera le joueur 1 et le joueur 2
+    if (rand() % 2 == 0)
+    {
+        salon->joueur1 = joueur1;
+        strcpy(salon->partie.joueur1.pseudo, joueur1->username);
+        salon->joueur2 = joueur2;
+        strcpy(salon->partie.joueur2.pseudo, joueur2->username);
+    }
+    else
+    {
+        salon->joueur2 = joueur1;
+        strcpy(salon->partie.joueur2.pseudo, joueur1->username);
+        salon->joueur1 = joueur2;
+        strcpy(salon->partie.joueur1.pseudo, joueur2->username);
+    }
     salon->tourActuel = 0;
     salon->statut = 1;
 
@@ -208,6 +219,9 @@ void terminerPartie(Salon *salon)
     salon->joueur1->challenger = NULL;
     salon->joueur2->challenger = NULL;
 
+    write_client(salon->joueur1->sock, "La partie est terminée.\n");
+    write_client(salon->joueur2->sock, "La partie est terminée.\n");
+
     if (salon->partie.joueur1.score > salon->partie.joueur2.score)
     {
         write_client(salon->joueur1->sock, "Vous avez gagné !\n");
@@ -232,9 +246,6 @@ void terminerPartie(Salon *salon)
         mettre_a_jour_statistiques(salon->joueur1->username, 1, 0, 0);
         mettre_a_jour_statistiques(salon->joueur2->username, 1, 0, 0);
     }
-
-    write_client(salon->joueur1->sock, "La partie est terminée.\n");
-    write_client(salon->joueur2->sock, "La partie est terminée.\n");
 }
 
 
