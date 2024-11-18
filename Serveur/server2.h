@@ -32,7 +32,7 @@ typedef struct in_addr IN_ADDR;
 #define CRLF        "\r\n"
 #define PORT         1977
 
-#define BUF_SIZE    1024
+#define BUF_SIZE    2048
 
 #include "client2.h"
 

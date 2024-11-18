@@ -1205,6 +1205,7 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
             }
         }
         else if (strcmp(message, "/decline") == 0)
+<<<<<<< HEAD
         {
             // Check if the user has a challenge
             if (utilisateur->challenger == NULL)
@@ -1352,6 +1353,155 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
         {
             // MODE PRIVÉ
         }
+=======
+        {
+            // Check if the user has a challenge
+            if (utilisateur->challenger == NULL)
+            {
+                write_client(utilisateur->sock, "Erreur : Vous n'avez pas de défi à refuser.\n");
+                return;
+            }
+
+            // Only the inviter (estEnJeu = 2) can cancel the challenge
+            if (utilisateur->estEnJeu == 2)
+            {
+                Utilisateur *adversaire = utilisateur->challenger;
+
+                // Reset challenge states
+                utilisateur->estEnJeu = 0;
+                adversaire->estEnJeu = 0;
+
+                // Inform both users
+                write_client(utilisateur->sock, "Défi annulé.\n");
+                char buffer[BUF_SIZE];
+                snprintf(buffer, BUF_SIZE, "Votre défi a été annulé par %s.\n", utilisateur->username);
+                write_client(adversaire->sock, buffer);
+
+                // Clear challenge references
+                utilisateur->challenger = NULL;
+                adversaire->challenger = NULL;
+            }
+            else if (utilisateur->estEnJeu == 3)
+            {
+                write_client(utilisateur->sock, "Défi refusé.\n");
+                char buffer[BUF_SIZE];
+                snprintf(buffer, BUF_SIZE, "Votre défi a été refusé par %s.\n", utilisateur->username);
+                write_client(utilisateur->challenger->sock, buffer);
+
+                // Reset challenge states
+                utilisateur->estEnJeu = 0;
+                utilisateur->challenger->estEnJeu = 0;
+
+                // Clear challenge references
+                utilisateur->challenger->challenger = NULL;
+                utilisateur->challenger = NULL;
+            }
+        }
+        else if (strncmp(message, "/play ", 6) == 0 && utilisateur->estEnJeu)
+        {
+            int caseJouee = atoi(message + 6) - 1;
+            Salon *salon = utilisateur->partieEnCours;
+            playCoup(salon, utilisateur, caseJouee);
+        }
+        else if (strcmp(message, "/list") == 0)
+        {
+            char buffer[BUF_SIZE] = "Joueurs en ligne :\n";
+            for (int i = 0; i < nbUtilisateursConnectes; i++)
+            {
+                strncat(buffer, utilisateurs[i].username, BUF_SIZE - strlen(buffer) - 1);
+                strncat(buffer, "\n", BUF_SIZE - strlen(buffer) - 1);
+            }
+            write_client(utilisateur->sock, buffer);
+        }
+        else if (strcmp(message, "/friendrequest") == 0)
+        {
+            traiter_friendrequest(utilisateur);
+        }
+        else if (strncmp(message, "/search ", 7) == 0)
+        {
+            char search_username[50];
+            if (sscanf(message + 8, "%49s", search_username) == 1)
+            {
+                traiter_search(utilisateur, search_username);
+            }
+            else
+            {
+                write_client(utilisateur->sock, "Format incorrect. Utilisez : /search [username]\n");
+            }
+        }
+        else if (strcmp(message, "/queueup") == 0)
+        {
+            joinQueue(utilisateur);
+        }
+        else if (strcmp(message, "/leavequeue") == 0)
+        {
+            leaveQueue(utilisateur);
+        }
+        else if (strcmp(message, "/help") == 0)
+        {
+            envoyerAide(utilisateur);
+        }
+        else if (strncmp(message, "/login ", 7) == 0)
+        {
+            write_client(utilisateur->sock, "Vous devez être déconnecté pour utiliser cette commande !\n");
+        }
+        else if (strncmp(message, "/signin ", 8) == 0)
+        {
+            write_client(utilisateur->sock, "Vous devez être déconnecté pour utiliser cette commande !\n");
+        }
+        else if (strcmp(message, "/logout") == 0)
+        {
+            traiter_logout(utilisateur);
+        }
+        else if (strncmp(message, "/bio", 4) == 0)
+        {
+            traiter_bio(utilisateur);
+        }
+        else if (strncmp(message, "/addfriend ", 11) == 0)
+        {
+            char target_username[50];
+            if (sscanf(message + 11, "%49s", target_username) == 1)
+            {
+                traiter_addfriend(utilisateur, target_username);
+            }
+            else
+            {
+                write_client(utilisateur->sock, "Format incorrect. Utilisez : /addfriend [username]\n");
+            }
+        }
+        else if (strcmp(message, "/friends") == 0)
+        {
+            traiter_friends(utilisateur);
+        }
+        else if (strncmp(message, "/faccept ", 9) == 0)
+        {
+            char friend_username[50];
+            if (sscanf(message + 9, "%49s", friend_username) == 1)
+            {
+                traiter_faccept(utilisateur, friend_username);
+            }
+            else
+            {
+                write_client(utilisateur->sock, "Format incorrect. Utilisez : /faccept [username]\n");
+            }
+        }
+        else if (strncmp(message, "/fdecline ", 9) == 0)
+        {
+            char friend_username[50];
+            if (sscanf(message + 9, "%49s", friend_username) == 1)
+            {
+                traiter_fdecline(utilisateur, friend_username);
+            }
+            else
+            {
+                write_client(utilisateur->sock, "Format incorrect. Utilisez : /fdecline [username]\n");
+            }
+        }
+        else if (strcmp(message, "/private") == 0)
+        {
+            // MODE PRIVÉ
+        }
+>>>>>>> e60c7e3bde3e75824f348fca34380fb2ec9cdbab
         else if (strcmp(message, "/public") == 0)
         {
             // MODE PUBLIC
@@ -1370,7 +1520,11 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
         else if ((strcmp(message, "/ff") == 0) && !utilisateur->estEnJeu)
         {
             write_client(utilisateur->sock, "Vous devez être en partie pour executer cette commande !\n");
+<<<<<<< HEAD
           
+=======
+           
+>>>>>>> e60c7e3bde3e75824f348fca34380fb2ec9cdbab
         }
         else if (strncmp(message, "/watch ", 7) == 0) // Comparer 7 caractères ("/watch ")
         {
