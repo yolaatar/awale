@@ -8,11 +8,14 @@
 #include "client2.h"
 #include "awale.h"
 
+#define BUF_SIZE 1024
 #define MAX_CLIENTS 100
 #define MAX_SALONS 50
 #define MAX_QUEUE 100
+#define MAX_SPECTATEURS 10
 // Déclaration anticipée de Utilisateur
 typedef struct Utilisateur Utilisateur;
+
 
 typedef struct
 {
@@ -21,7 +24,10 @@ typedef struct
     Partie partie;
     int tourActuel; // 0 pour joueur1, 1 pour joueur2
     int statut;     // 0 pour attente, 1 pour en cours, 2 pour terminé
+    Utilisateur *spectateurs[MAX_SPECTATEURS];
+    int nbSpectateurs;
 } Salon;
+
 
 struct Utilisateur
 {
@@ -64,6 +70,10 @@ Salon salons[MAX_SALONS];
 Utilisateur utilisateurs[MAX_CLIENTS];
 int nbUtilisateursConnectes = 0;
 int nbSalons = 0;
+
+void mettre_a_jour_statistiques(const char *username, int match_increment, int win_increment, int loss_increment);
+void envoyer_plateau_spectateur(Utilisateur *spectateur, Partie *partie);
+
 
 void initialiserUtilisateurs(void)
 {
@@ -187,7 +197,7 @@ void creerSalon(Utilisateur *joueur1, Utilisateur *joueur2)
         strcpy(salon->partie.joueur1.pseudo, joueur1->username);
         salon->joueur2 = joueur2;
         strcpy(salon->partie.joueur2.pseudo, joueur2->username);
-        salon->tourActuel = 0;
+    salon->tourActuel = 0;
         
     }
     salon->statut = 1;
@@ -230,26 +240,53 @@ void terminerPartie(Salon *salon)
     {
         write_client(salon->joueur1->sock, "Vous avez gagné !\n");
         write_client(salon->joueur2->sock, "Vous avez perdu.\n");
+
+        mettre_a_jour_statistiques(salon->joueur1->username, 1, 1, 0);
+        mettre_a_jour_statistiques(salon->joueur2->username, 1, 0, 1);
     }
     else if (salon->partie.joueur1.score < salon->partie.joueur2.score)
     {
         write_client(salon->joueur1->sock, "Vous avez perdu.\n");
         write_client(salon->joueur2->sock, "Vous avez gagné !\n");
+
+        mettre_a_jour_statistiques(salon->joueur1->username, 1, 0, 1);
+        mettre_a_jour_statistiques(salon->joueur2->username, 1, 1, 0);
     }
     else
     {
         write_client(salon->joueur1->sock, "Match nul !\n");
         write_client(salon->joueur2->sock, "Match nul !\n");
+
+        mettre_a_jour_statistiques(salon->joueur1->username, 1, 0, 0);
+        mettre_a_jour_statistiques(salon->joueur2->username, 1, 0, 0);
     }
 }
 
-void envoyerAide(Utilisateur *utilisateur)
-{
+
+void envoyerAide(Utilisateur *utilisateur) {
     write_client(utilisateur->sock, "Commandes disponibles :\n");
-    write_client(utilisateur->sock, "/challenge <nom> - Défier un joueur\n");
-    write_client(utilisateur->sock, "/play <case> - Jouer sur une case\n");
-    write_client(utilisateur->sock, "/help - Afficher l'aide\n");
+    write_client(utilisateur->sock, "/login [username] [password] - Se connecter.\n");
+    write_client(utilisateur->sock, "/signin [username] [password] - Créer un compte.\n");
+    write_client(utilisateur->sock, "/logout - Se déconnecter.\n");
+    write_client(utilisateur->sock, "/challenge [username] - Défier un joueur.\n");
+    write_client(utilisateur->sock, "/accept - Accepter un défi.\n");
+    write_client(utilisateur->sock, "/decline - Refuser un défi.\n");
+    write_client(utilisateur->sock, "/play [case] - Jouer sur une case.\n");
+    write_client(utilisateur->sock, "/ff - Abandonner la partie.\n");
+    write_client(utilisateur->sock, "/addfriend [username] - Ajouter un ami.\n");
+    write_client(utilisateur->sock, "/faccept [username] - Accepter une demande d'ami.\n");
+    write_client(utilisateur->sock, "/fdecline [username] - Refuser une demande d'ami.\n");
+    write_client(utilisateur->sock, "/friends - Voir la liste des amis.\n");
+    write_client(utilisateur->sock, "/search [username] - Rechercher un utilisateur.\n");
+    write_client(utilisateur->sock, "/profile - Voir votre profil.\n");
+    write_client(utilisateur->sock, "/public - Passer en mode public.\n");
+    write_client(utilisateur->sock, "/private - Passer en mode privé.\n");
+    write_client(utilisateur->sock, "/help - Voir cette liste de commandes.\n");
+    write_client(utilisateur->sock, "/list - Voir la liste des joueurs en ligne.\n");
+    write_client(utilisateur->sock, "/friendrequest - Voir vos demandes d'amis en attente.\n");
+    write_client(utilisateur->sock, "/bio - Modifier votre bio.\n");
 }
+
 
 void envoyerMessagePublic(Utilisateur *expediteur, const char *message)
 {
@@ -274,7 +311,6 @@ void playCoup(Salon *salon, Utilisateur *joueur, int caseJouee)
 
     else if (jouerCoup(partie, caseJouee, joueurIndex + 1) == 0)
     {
-        printf("tour actuel dans jouer coup : %d\n", salon->tourActuel);
         salon->tourActuel = (salon->tourActuel + 1) % 2;
         int tour = salon->tourActuel;
         envoyer_plateau_aux_users(salon->joueur1, salon->joueur2, partie, tour);  
@@ -449,6 +485,22 @@ int ajouter_utilisateur(const char *username, const char *password)
     FILE *friends = fopen(friends_file, "w");
     if (friends)
         fclose(friends);
+
+    char stats_file[150];
+    snprintf(stats_file, sizeof(stats_file), "%s/statistics", user_dir);
+
+    FILE *stats = fopen(stats_file, "w");
+    if (stats)
+    {
+        // Initialise le fichier avec 0 matchs, 0 victoires, 0 défaites
+        fprintf(stats, "matches:0\nwins:0\nlosses:0\n");
+        fclose(stats);
+    }
+    else
+    {
+        perror("Erreur lors de la création du fichier statistiques");
+    }
+
 
     return 1; // Inscription réussie
 }
@@ -714,6 +766,58 @@ void traiter_fdecline(Utilisateur *utilisateur, const char *friend_username)
     }
 }
 
+void lire_statistiques(const char *username, int *matches, int *wins, int *losses)
+{
+    char stats_file[150];
+    snprintf(stats_file, sizeof(stats_file), "Serveur/players/%s/statistics", username);
+
+    FILE *file = fopen(stats_file, "r");
+    if (file)
+    {
+        char line[256];
+        while (fgets(line, sizeof(line), file))
+        {
+            if (strncmp(line, "matches:", 8) == 0)
+                *matches = atoi(line + 8);
+            else if (strncmp(line, "wins:", 5) == 0)
+                *wins = atoi(line + 5);
+            else if (strncmp(line, "losses:", 7) == 0)
+                *losses = atoi(line + 7);
+        }
+        fclose(file);
+    }
+    else
+    {
+        perror("Erreur lors de la lecture des statistiques");
+        *matches = *wins = *losses = 0;
+    }
+}
+
+void mettre_a_jour_statistiques(const char *username, int match_increment, int win_increment, int loss_increment)
+{
+    char stats_file[150];
+    snprintf(stats_file, sizeof(stats_file), "Serveur/players/%s/statistics", username);
+
+    int matches = 0, wins = 0, losses = 0;
+    lire_statistiques(username, &matches, &wins, &losses);
+
+    matches += match_increment;
+    wins += win_increment;
+    losses += loss_increment;
+
+    FILE *file = fopen(stats_file, "w");
+    if (file)
+    {
+        fprintf(file, "matches:%d\nwins:%d\nlosses:%d\n", matches, wins, losses);
+        fclose(file);
+    }
+    else
+    {
+        perror("Erreur lors de la mise à jour des statistiques");
+    }
+}
+
+
 int save_bio_to_file(const char *username, const char *bio)
 {
     char bio_file[150];
@@ -773,15 +877,22 @@ void get_user_bio(const char *username, char *bio, size_t bio_size)
     FILE *file = fopen(bio_file, "r");
     if (file)
     {
-        fread(bio, 1, bio_size - 1, file);
-        bio[bio_size - 1] = '\0'; // Ensure null termination
+        size_t bytes_read = fread(bio, 1, bio_size - 1, file);
+        bio[bytes_read] = '\0'; // Assure la terminaison du buffer
         fclose(file);
+
+        // Vérifier si le fichier était vide ou uniquement composé d'espaces/blancs
+        if (bytes_read == 0 || strlen(bio) == 0 || strspn(bio, " \t\r\n") == strlen(bio))
+        {
+            snprintf(bio, bio_size, "Aucune bio");
+        }
     }
     else
     {
-        snprintf(bio, bio_size, "Non renseignée"); // Default message if bio not found
+        snprintf(bio, bio_size, "Aucune bio"); // Message par défaut si le fichier n'existe pas
     }
 }
+
 
 void traiter_search(Utilisateur *utilisateur, const char *search_username)
 {
@@ -791,17 +902,22 @@ void traiter_search(Utilisateur *utilisateur, const char *search_username)
         return;
     }
 
-    // Retrieve user bio
+    // Récupérer la bio de l'utilisateur
     char bio[1024];
     get_user_bio(search_username, bio, sizeof(bio));
 
-    // Format and send the user's information
+    // Lire les statistiques
+    int matches = 0, wins = 0, losses = 0;
+    lire_statistiques(search_username, &matches, &wins, &losses);
+
+    // Format et envoi des informations
     char info[BUF_SIZE];
     snprintf(info, sizeof(info),
-             "Informations sur %s :\n- Bio : %s\n- Victoires : 0\n- Défaites : 0\n",
-             search_username, bio);
+             "Informations sur %s :\n- Bio : %s\n- Matchs joués : %d\n- Victoires : %d\n- Défaites : %d\n",
+             search_username, bio, matches, wins, losses);
     write_client(utilisateur->sock, info);
 }
+
 
 void lire_relations(const char *friend_file, const char *prefix, char *output, size_t output_size)
 {
@@ -866,6 +982,75 @@ void traiter_friendrequest(Utilisateur *utilisateur)
     {
         write_client(utilisateur->sock, "Vous n'avez aucune demande d'ami.\n");
     }
+}
+
+void traiter_ff(Utilisateur *utilisateur)
+{
+    if (utilisateur->partieEnCours == NULL || utilisateur->estEnJeu != 1)
+    {
+        write_client(utilisateur->sock, "Erreur : Vous n'êtes pas en jeu.\n");
+        return;
+    }
+
+    Salon *salon = utilisateur->partieEnCours;
+    Utilisateur *adversaire = (salon->joueur1 == utilisateur) ? salon->joueur2 : salon->joueur1;
+
+    // Notifier les joueurs
+    write_client(utilisateur->sock, "Vous avez abandonné la partie. Défaite enregistrée.\n");
+    write_client(adversaire->sock, "Votre adversaire a abandonné la partie. Victoire enregistrée.\n");
+
+    // Mettre à jour les statistiques
+    mettre_a_jour_statistiques(utilisateur->username, 1, 0, 1); // Défaite pour l'utilisateur
+    mettre_a_jour_statistiques(adversaire->username, 1, 1, 0); // Victoire pour l'adversaire
+
+    // Réinitialiser l'état des joueurs et du salon
+    utilisateur->estEnJeu = 0;
+    adversaire->estEnJeu = 0;
+    utilisateur->partieEnCours = NULL;
+    adversaire->partieEnCours = NULL;
+    salon->statut = 2; // Partie terminée
+}
+
+void ajouter_spectateur_salon(Salon *salon, Utilisateur *spectateur)
+{
+    if (salon->nbSpectateurs >= MAX_SPECTATEURS)
+    {
+        write_client(spectateur->sock, "Erreur : Nombre maximum de spectateurs atteint pour cette partie.\n");
+        return;
+    }
+
+    salon->spectateurs[salon->nbSpectateurs++] = spectateur;
+}
+
+
+void traiter_watch(Utilisateur *spectateur, const char *search_username)
+{
+    // Trouver l'utilisateur à observer
+    printf("pseudo du joueur que je voeux regarer : %s\n",search_username);
+    Utilisateur *joueur = trouverUtilisateurParUsername(search_username);
+
+    if (joueur == NULL)
+    {
+        write_client(spectateur->sock, "Erreur : Joueur introuvable.\n");
+        return;
+    }
+
+    if (!joueur->estEnJeu || joueur->partieEnCours == NULL)
+    {
+        write_client(spectateur->sock, "Erreur : Ce joueur n'est pas en train de jouer.\n");
+        return;
+    }
+
+    // Ajouter le spectateur à la liste des spectateurs
+    Salon *salon = joueur->partieEnCours;
+
+    write_client(spectateur->sock, "Vous regardez la partie en cours...\n");
+
+    // Envoyer l'état initial du plateau au spectateur
+    envoyer_plateau_spectateur(spectateur, &salon->partie);
+
+    // Ajouter le spectateur à la liste des spectateurs dans le salon
+    ajouter_spectateur_salon(salon, spectateur);
 }
 
 void startMatchmakingGame() {
@@ -1171,6 +1356,35 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
         {
             // MODE PUBLIC
         }
+        else if (strcmp(message, "/profile") == 0)
+        {
+            traiter_search(utilisateur, utilisateur->username);
+            // Afficher mon profil
+        }
+        else if ((strcmp(message, "/ff") == 0) && utilisateur->estEnJeu)
+        {
+            traiter_ff(utilisateur);
+            // traiter_search(utilisateur, utilisateur->username);
+            // Afficher mon profil
+        }
+        else if ((strcmp(message, "/ff") == 0) && !utilisateur->estEnJeu)
+        {
+            write_client(utilisateur->sock, "Vous devez être en partie pour executer cette commande !\n");
+           
+        }
+        else if (strncmp(message, "/watch ", 7) == 0) // Comparer 7 caractères ("/watch ")
+        {
+            char search_username[50];
+            if (sscanf(message + 7, "%49s", search_username) == 1) // Décalage de 7 pour ignorer "/watch "
+            {
+                traiter_watch(utilisateur, search_username);
+            }
+            else
+            {
+                write_client(utilisateur->sock, "Format incorrect. Utilisez : /watch [username]\n");
+            }
+        }
+
         else
         {
             envoyerMessagePublic(utilisateur, message);
@@ -1289,15 +1503,19 @@ static void app(void)
             {
                 int n = read_client(utilisateur->sock, buffer);
                 if (n == 0 || utilisateur->sock == INVALID_SOCKET)
-                { // Déconnexion du client
+                {
                     printf("Déconnexion de l'utilisateur : %s\n", utilisateur->username);
 
-                    // Réinitialiser isConnected et d'autres champs utilisateur
+                    if (utilisateur->estEnJeu && utilisateur->partieEnCours != NULL)
+                    {
+                        traiter_ff(utilisateur); // Appeler traiter_ff pour enregistrer l'abandon
+                    }
+
+                    // Réinitialiser les états
                     utilisateur->isConnected = 0;
                     memset(utilisateur->username, 0, sizeof(utilisateur->username));
                     memset(utilisateur->pseudo, 0, sizeof(utilisateur->pseudo));
 
-                    // Fermer la connexion et réorganiser la liste
                     closesocket(utilisateur->sock);
                     utilisateur->sock = INVALID_SOCKET;
 
@@ -1306,8 +1524,9 @@ static void app(void)
                         utilisateurs[j] = utilisateurs[j + 1];
                     }
                     nbUtilisateursConnectes--;
-                    i--; // Réajuster l'index pour ne pas sauter un utilisateur
+                    i--;
                 }
+
 
                 else
                 {
