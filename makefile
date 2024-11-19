@@ -1,7 +1,7 @@
 # Variables de compilation
 CC = gcc
 CFLAGS = 
-SERVER_SOURCES = Serveur/awaleTest.c Serveur/serveurReworked.c
+SERVER_SOURCES = Serveur/awale.c Serveur/serveurReworked.c
 CLIENT_SOURCES = Client/client2.c
 SERVER_OBJECTS = $(SERVER_SOURCES:.c=.o)
 CLIENT_OBJECTS = $(CLIENT_SOURCES:.c=.o)

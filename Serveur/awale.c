@@ -22,17 +22,19 @@ typedef struct {
 } Partie;
 
 int initialiserPartie(Partie *partie) {
-    /*for (int i = 0; i < 12; i++) {
-        partie->plateau.cases[i].nbGraines = 2;
-    }*/
+    
+    for (int i = 0; i < 12; i++) {
+        partie->plateau.cases[i].nbGraines = 4;
+    }
 
-    Plateau plateauTest = {
-    .cases = {{0}, {0}, {0}, {0}, {0}, {1}, {1}, {0}, {2}, {0}, {1}, {0}}
-    };
-    partie->plateau = plateauTest;
+    // Plateau plateauTest = {
+    // .cases = {{4}, {4}, {4}, {4}, {4}, {1}, {1}, {4}, {4}, {4}, {4}, {0}}
+    // };
+    // partie->plateau = plateauTest;
 
-    snprintf(partie->joueur1.pseudo, sizeof(partie->joueur1.pseudo), partie->joueur1.pseudo);
-    snprintf(partie->joueur2.pseudo, sizeof(partie->joueur2.pseudo), partie->joueur2.pseudo);
+    snprintf(partie->joueur1.pseudo, sizeof(partie->joueur1.pseudo), "%s", partie->joueur1.pseudo);
+    snprintf(partie->joueur2.pseudo, sizeof(partie->joueur2.pseudo), "%s", partie->joueur2.pseudo);
+
 
     partie->joueur1.score = 0;
     partie->joueur2.score = 0;
@@ -137,15 +139,20 @@ int jouerCoup(Partie *partie, int caseJouee, int joueur) {
     int adversaire = (joueur == 1) ? 2 : 1;
 
     // Vérifie que le joueur joue bien dans son camp et que la case n'est pas vide
-    if (partie->plateau.cases[caseJouee].nbGraines == 0 ||
-        (joueur == 1 && (caseJouee < 0 || caseJouee >= 6)) ||
+    if (partie->plateau.cases[caseJouee].nbGraines == 0) {
+        printf("Coup illégal : la case est vide.\n");
+        return 1;
+    }
+    if ((joueur == 1 && (caseJouee < 0 || caseJouee >= 6)) ||
         (joueur == 2 && (caseJouee < 6 || caseJouee >= 12))) {
-        return 1; // Coup illégal
+        printf("Coup illégal : le joueur joue en dehors de son camp.\n");
+        return 1;
     }
 
     // Si l'adversaire est en famine, le coup doit le nourrir
     if (nombreGrainesRestantesJoueur(partie, adversaire) == 0 && !coupNourritAdversaire(partie, caseJouee, joueur)) {
-        return 1; // Coup illégal car il ne nourrit pas l'adversaire en famine
+        printf("Coup illégal : l'adversaire est en famine, le coup doit le nourrir.\n");
+        return 1;
     }
 
     int nbGraines = partie->plateau.cases[caseJouee].nbGraines;
@@ -162,8 +169,9 @@ int jouerCoup(Partie *partie, int caseJouee, int joueur) {
         capturerGraines(partie, index, joueur);
     }
 
-    return 0;
+    return 0; // Coup valide
 }
+
 
 int peutForcerCapture(Partie *partie, int joueur) {
     int debutJoueur = (joueur - 1) * 6;
@@ -193,79 +201,98 @@ int peutForcerCapture(Partie *partie, int joueur) {
 
 
 int verifierFinPartie(Partie *partie) {
-    // Vérifie si un joueur a plus de 24 points, ce qui signifie qu'il a gagné
+    int totalGraines = 0;
+    for (int i = 0; i < 12; i++) {
+        totalGraines += partie->plateau.cases[i].nbGraines;
+    }
+
+    // Vérifie si un joueur a plus de 24 points
     if (partie->joueur1.score > 24 || partie->joueur2.score > 24) {
+        printf("Fin de la partie : un joueur a plus de 24 points.\n");
         return 1;
     }
 
-    // Vérifie si l'un des joueurs est en famine et si l'adversaire peut le nourrir
+    // Vérifie la famine
     if (nombreGrainesRestantesJoueur(partie, 1) == 0) {
         if (!peutNourrirAdversaire(partie, 1)) {
-            //On distribue les graines restantes au joueur qui joue 
             for (int i = 6; i < 12; i++) {
                 partie->joueur2.score += partie->plateau.cases[i].nbGraines;
                 partie->plateau.cases[i].nbGraines = 0;
             }
-            return 1; // Le joueur 1 est en famine et ne peut pas être nourri
+            printf("Fin de la partie : le joueur 1 est en famine et ne peut pas être nourri.\n");
+            return 1;
         }
     } else if (nombreGrainesRestantesJoueur(partie, 2) == 0) {
         if (!peutNourrirAdversaire(partie, 2)) {
-            //On distribue les graines restantes au joueur qui joue
             for (int i = 0; i < 6; i++) {
                 partie->joueur1.score += partie->plateau.cases[i].nbGraines;
                 partie->plateau.cases[i].nbGraines = 0;
             }
-            return 1; // Le joueur 2 est en famine et ne peut pas être nourri
+            printf("Fin de la partie : le joueur 2 est en famine et ne peut pas être nourri.\n");
+            return 1;
         }
     }
 
-    // Vérifie si aucun joueur ne peut forcer une capture
-    if (!peutForcerCapture(partie, 1) && !peutForcerCapture(partie, 2)) {
-        return 1; // Aucun joueur ne peut forcer une capture, la partie se termine
+    // Fin de partie par indétermination si le nombre total de graines est très faible (2 ou 3)
+    if (totalGraines <= 3 && (!peutForcerCapture(partie, 1) && !peutForcerCapture(partie, 2))) {
+        printf("Fin de la partie par indétermination : trop peu de graines pour capturer.\n");
+        
+        // Chaque joueur récupère les graines restantes dans son camp
+        for (int i = 0; i < 6; i++) {
+            partie->joueur1.score += partie->plateau.cases[i].nbGraines;
+            partie->plateau.cases[i].nbGraines = 0;
+        }
+        for (int i = 6; i < 12; i++) {
+            partie->joueur2.score += partie->plateau.cases[i].nbGraines;
+            partie->plateau.cases[i].nbGraines = 0;
+        }
+
+        return 1; // La partie se termine
     }
 
     return 0; // La partie peut continuer
 }
 
-int main() {
-    Partie partie;
-    int partieEnCours = 1, tour = 1, caseJouee;
 
-    initialiserPartie(&partie);
+// int main() {
+//     Partie partie;
+//     int partieEnCours = 1, tour = 1, caseJouee;
 
-    while (partieEnCours) {
-        afficherPlateau(&partie);
-        int joueur = tour % 2 == 1 ? 1 : 2;
-        printf("Tour %d, joueur %d (%s). Choisissez une case à jouer (1-6 pour J1, 7-12 pour J2): ", tour, joueur, joueur == 1 ? partie.joueur1.pseudo : partie.joueur2.pseudo);
-        scanf("%d", &caseJouee);
+//     initialiserPartie(&partie);
 
-        //condition pour terminer la partie dans le terminal 
-        if (caseJouee == -1) {
-            printf("Partie annulée.\n");
-            partieEnCours = 0;
-            break;
-        }
-        // Ajuste l'index pour correspondre aux indices du tableau (0-11 au lieu de 1-12)
-        caseJouee -= 1;
-        if (jouerCoup(&partie, caseJouee, joueur) == 0) {
-            if (verifierFinPartie(&partie)) {
-                partieEnCours = 0;
-                printf("\nFin de la partie !\n");
-                afficherPlateau(&partie);
-                if (partie.joueur1.score > partie.joueur2.score) printf("Le gagnant est %s !\n", partie.joueur1.pseudo);
-                else if (partie.joueur1.score < partie.joueur2.score) printf("Le gagnant est %s !\n", partie.joueur2.pseudo);
-                else printf("Match nul !\n");
-            }
-            tour++;
-        } else {
-            //On vérifie si l'adversaire est en famine
-            if(joueur == 1 && nombreGrainesRestantesJoueur(&partie, 2) == 0) {
-                printf("Le joueur 2 est en famine, vous devez le nourrir.\n");
-            } else if(joueur == 2 && nombreGrainesRestantesJoueur(&partie, 1) == 0) {
-                printf("Le joueur 1 est en famine, vous devez le nourrir.\n");
-            } else
-            printf("Coup illégal, essayez encore.\n");
-        }
-    }
-    return 0;
-}
+//     while (partieEnCours) {
+//         afficherPlateau(&partie);
+//         int joueur = tour % 2 == 1 ? 1 : 2;
+//         printf("Tour %d, joueur %d (%s). Choisissez une case à jouer (1-6 pour J1, 7-12 pour J2): ", tour, joueur, joueur == 1 ? partie.joueur1.pseudo : partie.joueur2.pseudo);
+//         scanf("%d", &caseJouee);
+
+//         //condition pour terminer la partie dans le terminal 
+//         if (caseJouee == -1) {
+//             printf("Partie annulée.\n");
+//             partieEnCours = 0;
+//             break;
+//         }
+//         // Ajuste l'index pour correspondre aux indices du tableau (0-11 au lieu de 1-12)
+//         caseJouee -= 1;
+//         if (jouerCoup(&partie, caseJouee, joueur) == 0) {
+//             if (verifierFinPartie(&partie)) {
+//                 partieEnCours = 0;
+//                 printf("\nFin de la partie !\n");
+//                 afficherPlateau(&partie);
+//                 if (partie.joueur1.score > partie.joueur2.score) printf("Le gagnant est %s !\n", partie.joueur1.pseudo);
+//                 else if (partie.joueur1.score < partie.joueur2.score) printf("Le gagnant est %s !\n", partie.joueur2.pseudo);
+//                 else printf("Match nul !\n");
+//             }
+//             tour++;
+//         } else {
+//             //On vérifie si l'adversaire est en famine
+//             if(joueur == 1 && nombreGrainesRestantesJoueur(&partie, 2) == 0) {
+//                 printf("Le joueur 2 est en famine, vous devez le nourrir.\n");
+//             } else if(joueur == 2 && nombreGrainesRestantesJoueur(&partie, 1) == 0) {
+//                 printf("Le joueur 1 est en famine, vous devez le nourrir.\n");
+//             } else
+//             printf("Coup illégal, essayez encore.\n");
+//         }
+//     }
+//     return 0;
+// }
