@@ -334,6 +334,7 @@ void envoyerAide(Utilisateur *utilisateur) {
     write_client(utilisateur->sock, "/list - Voir la liste des joueurs en ligne.\n");
     write_client(utilisateur->sock, "/friendrequest - Voir vos demandes d'amis en attente.\n");
     write_client(utilisateur->sock, "/bio - Modifier votre bio.\n");
+    write_client(utilisateur->sock, "/msg [username] [message] - Envoyer un message privé.\n");
 }
 
 
