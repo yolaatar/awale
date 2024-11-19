@@ -1218,6 +1218,19 @@ void leaveQueue(Utilisateur *utilisateur) {
     }
 }
 
+void traiter_msg(Utilisateur *utilisateur, char* target_username, char* msg) 
+{
+    Utilisateur *target = trouverUtilisateurParUsername(target_username);
+    if (target == NULL) {
+        write_client(utilisateur->sock, "Erreur : Utilisateur introuvable.\n");
+        return;
+    }
+
+    char buffer[BUF_SIZE];
+    snprintf(buffer, BUF_SIZE, "Message de %s : %s\n", utilisateur->username, msg);
+    write_client(target->sock, buffer);
+    write_client(utilisateur->sock, "Message envoyé.\n");
+}
 
 void traiterMessage(Utilisateur *utilisateur, char *message)
 {
@@ -1480,12 +1493,18 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
                 write_client(utilisateur->sock, "Format incorrect. Utilisez : /watch [username]\n");
             }
         }
-        else if (strcmp(message, "/unwatch") == 0)
+        else if (strncmp(message, "/msg ", 5) == 0)
         {
-            traiter_unwatch(utilisateur);
+            char target_username[50], msg[BUF_SIZE];
+            if (sscanf(message + 5, "%49s %999[^\n]", target_username, msg) == 2)
+            {
+                traiter_msg(utilisateur, target_username, msg);
+            }
+            else
+            {
+                write_client(utilisateur->sock, "Format incorrect. Utilisez : /msg [username] [message]\n");
+            }
         }
-
-
         else
         {
             envoyerMessagePublic(utilisateur, message);
