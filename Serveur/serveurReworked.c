@@ -35,6 +35,7 @@ struct Utilisateur
     char pseudo[20];
     char username[50];
     char password[50];
+    int estPublic;        // 1 si l'utilisateur est public, 0 s'il est privé
     int estEnJeu;         // 1 si en jeu, 0 si il ne l'est pas et 2 si il a déjà lancé un défi
     int isConnected;      // 1 si connecté, 0 sinon
     Salon *partieEnCours; // NULL si le joueur n'est pas en jeu
@@ -83,6 +84,7 @@ void initialiserUtilisateurs(void)
         utilisateurs[i].partieEnCours = NULL;
         utilisateurs[i].joueur = NULL;
         utilisateurs[i].isConnected = 0;
+        utilisateurs[i].estPublic = 1;
     }
 }
 
@@ -437,6 +439,21 @@ void ajouter_utilisateur_connecte(const char *username)
         }
     }
 }
+
+void traiter_public(Utilisateur *utilisateur)
+{
+    
+    utilisateur->estPublic = 1;
+    write_client(utilisateur->sock, "Votre statut est maintenant public. Les autres joueurs peuvent observer vos parties.\n");
+}
+
+void traiter_prive(Utilisateur *utilisateur)
+{
+
+    utilisateur->estPublic = 0;
+    write_client(utilisateur->sock, "Votre statut est maintenant privé. Seuls vos amis peuvent observer vos parties.\n");
+}
+
 
 void traiter_login(Utilisateur *utilisateur, const char *username, const char *password)
 {
@@ -1061,6 +1078,16 @@ void traiter_ff(Utilisateur *utilisateur)
     write_client(utilisateur->sock, "Vous avez abandonné la partie. Défaite enregistrée.\n");
     write_client(adversaire->sock, "Votre adversaire a abandonné la partie. Victoire enregistrée.\n");
 
+    // Notifier les spectateurs
+    for (int i = 0; i < salon->nbSpectateurs; i++)
+    {
+        Utilisateur *spectateur = salon->spectateurs[i];
+        char buffer[BUF_SIZE];
+        snprintf(buffer, BUF_SIZE, "Le joueur %s a abandonné la partie. Le joueur %s est déclaré vainqueur.\n",
+                 utilisateur->username, adversaire->username);
+        write_client(spectateur->sock, buffer);
+    }
+
     // Mettre à jour les statistiques
     mettre_a_jour_statistiques(utilisateur->username, 1, 0, 1); // Défaite pour l'utilisateur
     mettre_a_jour_statistiques(adversaire->username, 1, 1, 0); // Victoire pour l'adversaire
@@ -1461,14 +1488,15 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
                 write_client(utilisateur->sock, "Format incorrect. Utilisez : /fdecline [username]\n");
             }
         }
-        else if (strcmp(message, "/private") == 0)
-        {
-            // MODE PRIVÉ
-        }
         else if (strcmp(message, "/public") == 0)
         {
-            // MODE PUBLIC
+            traiter_public(utilisateur);
         }
+        else if (strcmp(message, "/private") == 0)
+        {
+            traiter_prive(utilisateur);
+        }
+
         else if (strcmp(message, "/profile") == 0)
         {
             traiter_search(utilisateur, utilisateur->username);
