@@ -154,7 +154,7 @@ void envoyer_plateau_spectateur(Utilisateur *spectateur, Salon *salon)
 
     // Envoyer à qui c'est le tour de jouer
     
-    if (salon->partie.tourActuel == 0)
+    if (salon->tourActuel == 0)
     {
         write_client(spectateur->sock,"C'est au tour du joueur 1.\n");
     }
