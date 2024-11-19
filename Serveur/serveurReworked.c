@@ -152,6 +152,17 @@ void envoyer_plateau_spectateur(Utilisateur *spectateur, Salon *salon)
 
     strncat(buffer, "  ---------------------------------\n", BUF_SIZE - strlen(buffer) - 1);
 
+    // Envoyer à qui c'est le tour de jouer
+    
+    if (salon->partie.tourActuel == 0)
+    {
+        write_client(spectateur->sock,"C'est au tour du joueur 1.\n");
+    }
+    else
+    {
+        write_client(spectateur->sock,"C'est au tour du joueur 2.\n");
+    }
+
     write_client(spectateur->sock, buffer);
 }
 
@@ -618,6 +629,44 @@ void traiter_logout(Utilisateur *utilisateur)
     closesocket(utilisateur->sock);
     utilisateur->sock = INVALID_SOCKET;
 }
+
+void traiter_unwatch(Utilisateur *utilisateur)
+{
+    // Vérifiez si l'utilisateur est un spectateur
+    int found = 0;
+    for (int i = 0; i < nbSalons; i++)
+    {
+        Salon *salon = &salons[i];
+        for (int j = 0; j < salon->nbSpectateurs; j++)
+        {
+            if (salon->spectateurs[j] == utilisateur)
+            {
+                found = 1;
+
+                // Retirez le spectateur de la liste
+                for (int k = j; k < salon->nbSpectateurs - 1; k++)
+                {
+                    salon->spectateurs[k] = salon->spectateurs[k + 1];
+                }
+                salon->nbSpectateurs--;
+
+                // Notifiez l'utilisateur
+                write_client(utilisateur->sock, "Vous avez arrêté de regarder la partie.\n");
+
+                // Quittez les boucles après avoir supprimé l'utilisateur
+                break;
+            }
+        }
+        if (found)
+            break;
+    }
+
+    if (!found)
+    {
+        write_client(utilisateur->sock, "Erreur : Vous ne regardez aucune partie actuellement.\n");
+    }
+}
+
 
 int ajouter_ligne_fichier(const char *username, const char *filename, const char *line)
 {
