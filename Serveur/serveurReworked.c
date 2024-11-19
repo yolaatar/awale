@@ -71,7 +71,7 @@ int nbUtilisateursConnectes = 0;
 int nbSalons = 0;
 
 void mettre_a_jour_statistiques(const char *username, int match_increment, int win_increment, int loss_increment);
-void envoyer_plateau_spectateur(Utilisateur *spectateur, Partie *partie);
+void envoyer_plateau_spectateur(Utilisateur *spectateur, Salon *salon);
 
 
 void initialiserUtilisateurs(void)
@@ -116,21 +116,23 @@ void handleNouvelleConnexion(SOCKET sock)
     write_client(sock, "Bienvenue ! Utilisez /challenge <nom> pour lancer un défi.\n");
 }
 
-void envoyer_plateau_spectateur(Utilisateur *spectateur, Partie *partie)
+void envoyer_plateau_spectateur(Utilisateur *spectateur, Salon *salon)
 {
     char buffer[BUF_SIZE];
+    
+    
 
     snprintf(buffer, BUF_SIZE, "  ---------------------------------\n");
     snprintf(buffer + strlen(buffer), BUF_SIZE - strlen(buffer),
              "  Joueur 1 : %s, Score : %d\n",
-             partie->joueur1.pseudo, partie->joueur1.score);
+             salon->joueur1->username, salon->partie.joueur1.score);
 
     // Ligne supérieure (cases 0 à 5 pour Joueur 1)
     strncat(buffer, "   ", BUF_SIZE - strlen(buffer) - 1);
     for (int i = 0; i < 6; i++)
     {
         char temp[10];
-        snprintf(temp, 10, "%2d ", partie->plateau.cases[i].nbGraines);
+        snprintf(temp, 10, "%2d ", salon->partie.plateau.cases[i].nbGraines);
         strncat(buffer, temp, BUF_SIZE - strlen(buffer) - 1);
     }
     strncat(buffer, "\n   ", BUF_SIZE - strlen(buffer) - 1);
@@ -139,14 +141,14 @@ void envoyer_plateau_spectateur(Utilisateur *spectateur, Partie *partie)
     for (int i = 11; i >= 6; i--)
     {
         char temp[10];
-        snprintf(temp, 10, "%2d ", partie->plateau.cases[i].nbGraines);
+        snprintf(temp, 10, "%2d ", salon->partie.plateau.cases[i].nbGraines);
         strncat(buffer, temp, BUF_SIZE - strlen(buffer) - 1);
     }
     strncat(buffer, "\n", BUF_SIZE - strlen(buffer) - 1);
 
     snprintf(buffer + strlen(buffer), BUF_SIZE - strlen(buffer),
              "  Joueur 2 : %s, Score : %d\n",
-             partie->joueur2.pseudo, partie->joueur2.score);
+             salon->joueur2->username, salon->partie.joueur2.score);
 
     strncat(buffer, "  ---------------------------------\n", BUF_SIZE - strlen(buffer) - 1);
 
@@ -349,7 +351,16 @@ void playCoup(Salon *salon, Utilisateur *joueur, int caseJouee)
     {
         salon->tourActuel = (salon->tourActuel + 1) % 2;
         int tour = salon->tourActuel;
-        envoyer_plateau_aux_users(salon->joueur1, salon->joueur2, partie, tour);  
+
+        // Envoyer le plateau aux deux joueurs
+        envoyer_plateau_aux_users(salon->joueur1, salon->joueur2, partie, tour);
+
+        // Envoyer le plateau à tous les spectateurs
+        for (int i = 0; i < salon->nbSpectateurs; i++)
+        {
+            Utilisateur *spectateur = salon->spectateurs[i];
+            envoyer_plateau_spectateur(spectateur, salon);
+        }
     }
     else
     {
@@ -1083,7 +1094,7 @@ void traiter_watch(Utilisateur *spectateur, const char *search_username)
     write_client(spectateur->sock, "Vous regardez la partie en cours...\n");
 
     // Envoyer l'état initial du plateau au spectateur
-    envoyer_plateau_spectateur(spectateur, &salon->partie);
+    envoyer_plateau_spectateur(spectateur, salon);
 
     // Ajouter le spectateur à la liste des spectateurs dans le salon
     ajouter_spectateur_salon(salon, spectateur);
