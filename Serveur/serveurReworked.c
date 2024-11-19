@@ -152,6 +152,17 @@ void envoyer_plateau_spectateur(Utilisateur *spectateur, Salon *salon)
 
     strncat(buffer, "  ---------------------------------\n", BUF_SIZE - strlen(buffer) - 1);
 
+    // Envoyer à qui c'est le tour de jouer
+    
+    if (salon->partie.tourActuel == 0)
+    {
+        write_client(spectateur->sock,"C'est au tour du joueur 1.\n");
+    }
+    else
+    {
+        write_client(spectateur->sock,"C'est au tour du joueur 2.\n");
+    }
+
     write_client(spectateur->sock, buffer);
 }
 
