@@ -162,7 +162,7 @@ void envoyer_plateau_aux_users(Utilisateur *joueur1, Utilisateur *joueur2, Parti
 
     // Information sur le Joueur 1
     char temp[128];
-    snprintf(temp, sizeof(temp), "  Joueur 1 : %s, Score : %d\n", partie->joueur1.pseudo, partie->joueur1.score);
+    snprintf(temp, sizeof(temp), "  Joueur 1 : %s, Score : %d\n", joueur1->username, partie->joueur1.score);
     strncat(buffer, temp, BUF_SIZE - strlen(buffer) - 1);
 
     // Ligne supérieure (cases 0 à 5 pour Joueur 1)
@@ -183,7 +183,7 @@ void envoyer_plateau_aux_users(Utilisateur *joueur1, Utilisateur *joueur2, Parti
     strncat(buffer, "\n", BUF_SIZE - strlen(buffer) - 1);
 
     // Information sur le Joueur 2
-    snprintf(temp, sizeof(temp), "  Joueur 2 : %s, Score : %d\n", partie->joueur2.pseudo, partie->joueur2.score);
+    snprintf(temp, sizeof(temp), "  Joueur 2 : %s, Score : %d\n", joueur2->username, partie->joueur2.score);
     strncat(buffer, temp, BUF_SIZE - strlen(buffer) - 1);
 
     strncat(buffer, "  --------------------------\n", BUF_SIZE - strlen(buffer) - 1);
@@ -233,7 +233,7 @@ void creerSalon(Utilisateur *joueur1, Utilisateur *joueur2)
         strcpy(salon->partie.joueur1.pseudo, joueur1->username);
         salon->joueur2 = joueur2;
         strcpy(salon->partie.joueur2.pseudo, joueur2->username);
-    salon->tourActuel = 0;
+        salon->tourActuel = 0;
         
     }
     salon->statut = 1;
@@ -1104,7 +1104,7 @@ void startMatchmakingGame() {
         player2->estEnJeu = 1;
 
         // Create a new salon (game session) for the two players
-        creerSalon(player1, player2);
+        creerSalon(player2, player1);
     }
 }
 
