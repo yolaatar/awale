@@ -15,34 +15,6 @@
 // Déclaration anticipée de Utilisateur
 typedef struct Utilisateur Utilisateur;
 
-
-typedef struct
-{
-    Utilisateur *joueur1;
-    Utilisateur *joueur2;
-    Partie partie;
-    int tourActuel; // 0 pour joueur1, 1 pour joueur2
-    int statut;     // 0 pour attente, 1 pour en cours, 2 pour terminé
-    Utilisateur *spectateurs[MAX_SPECTATEURS];
-    int nbSpectateurs;
-} Salon;
-
-
-struct Utilisateur
-{
-    SOCKET sock;
-    int id;
-    char pseudo[20];
-    char username[50];
-    char password[50];
-    int estPublic;        // 1 si l'utilisateur est public, 0 s'il est privé
-    int estEnJeu;         // 1 si en jeu, 0 si il ne l'est pas et 2 si il a déjà lancé un défi
-    int isConnected;      // 1 si connecté, 0 sinon
-    Salon *partieEnCours; // NULL si le joueur n'est pas en jeu
-    Joueur *joueur;       // Pointeur vers le joueur (Joueur1 ou Joueur2) dans une partie
-    Utilisateur *challenger;
-};
-
 static void init(void)
 {
 #ifdef WIN32
@@ -64,15 +36,16 @@ static void end(void)
 }
 
 
-Utilisateur *queue[MAX_QUEUE];
+int queue[MAX_QUEUE];
 int queueSize = 0;
 Salon salons[MAX_SALONS];
 Utilisateur utilisateurs[MAX_CLIENTS];
 int nbUtilisateursConnectes = 0;
 int nbSalons = 0;
+static int nextUserId = 1; 
 
 void mettre_a_jour_statistiques(const char *username, int match_increment, int win_increment, int loss_increment);
-void envoyer_plateau_spectateur(Utilisateur *spectateur, Salon *salon);
+void envoyer_plateau_spectateur(int idSpectateur, Salon *salon);
 
 
 void initialiserUtilisateurs(void)
@@ -98,30 +71,10 @@ void initialiserSalons(void)
     }
 }
 
-void handleNouvelleConnexion(SOCKET sock)
-{
-    if (nbUtilisateursConnectes >= MAX_CLIENTS)
-    {
-        printf("Nombre maximal de clients atteint.\n");
-        closesocket(sock);
-        return;
-    }
-
-    Utilisateur *utilisateur = &utilisateurs[nbUtilisateursConnectes];
-    utilisateur->sock = sock;
-    utilisateur->estEnJeu = 0;
-    utilisateur->partieEnCours = NULL;
-    nbUtilisateursConnectes++;
-    printf("Nouvel utilisateur connecté !\n");
-
-    // Envoyer un message d'accueil et les options
-    write_client(sock, "Bienvenue ! Utilisez /challenge <nom> pour lancer un défi.\n");
-}
-
-void envoyer_plateau_spectateur(Utilisateur *spectateur, Salon *salon)
+void envoyer_plateau_spectateur(int idSpectateur, Salon *salon)
 {
     char buffer[BUF_SIZE];
-    
+    Utilisateur *spectateur = trouverUtilisateurParId(idSpectateur);
     
 
     snprintf(buffer, BUF_SIZE, "  ---------------------------------\n");
@@ -168,9 +121,11 @@ void envoyer_plateau_spectateur(Utilisateur *spectateur, Salon *salon)
     write_client(spectateur->sock, buffer);
 }
 
-void envoyer_plateau_aux_users(Utilisateur *joueur1, Utilisateur *joueur2, Partie *partie, int tour)
+void envoyer_plateau_aux_users(int idJoueur1, int idJoueur2, Partie *partie, int tour)
 {
     char buffer[BUF_SIZE];
+    Utilisateur *joueur1 = trouverUtilisateurParId(idJoueur1);
+    Utilisateur *joueur2 = trouverUtilisateurParId(idJoueur2);
 
     // Préparation de l'affichage du plateau
     snprintf(buffer, BUF_SIZE, "  --------------------------\n");
@@ -221,7 +176,7 @@ void envoyer_plateau_aux_users(Utilisateur *joueur1, Utilisateur *joueur2, Parti
 }
 
 
-void creerSalon(Utilisateur *joueur1, Utilisateur *joueur2)
+void creerSalon(int idJoueur1, int idJoueur2)
 {
     if (nbSalons >= MAX_SALONS)
     {
@@ -231,6 +186,8 @@ void creerSalon(Utilisateur *joueur1, Utilisateur *joueur2)
     }
 
     Salon *salon = &salons[nbSalons++];
+    Utilisateur *joueur1 = trouverUtilisateurParId(idJoueur1);
+    Utilisateur *joueur2 = trouverUtilisateurParId(idJoueur2);
     // tirer au sort qui sera le joueur 1 et le joueur 2
     if (rand() % 2 == 0)
     {
@@ -259,7 +216,7 @@ void creerSalon(Utilisateur *joueur1, Utilisateur *joueur2)
     joueur1->partieEnCours = salon;
     joueur2->partieEnCours = salon;
 
-    envoyer_plateau_aux_users(joueur1, joueur2, &salon->partie, tour);
+    envoyer_plateau_aux_users(idJoueur1, idJoueur2, &salon->partie, tour);
 }
 
 Utilisateur *trouverUtilisateurParUsername(const char *username)
@@ -267,6 +224,18 @@ Utilisateur *trouverUtilisateurParUsername(const char *username)
     for (int i = 0; i < nbUtilisateursConnectes; i++)
     {
         if (strcmp(utilisateurs[i].username, username) == 0)
+        {
+            return &utilisateurs[i];
+        }
+    }
+    return NULL; // Aucun utilisateur trouvé
+}
+
+Utilisateur *trouverUtilisateurParId(int idjoueur)
+{
+    for (int i = 0; i < nbUtilisateursConnectes; i++)
+    {
+        if (utilisateurs[i].id == idjoueur)
         {
             return &utilisateurs[i];
         }
@@ -314,7 +283,8 @@ void terminerPartie(Salon *salon)
 }
 
 
-void envoyerAide(Utilisateur *utilisateur) {
+void envoyerAide(int idUtilisateur) {
+    Utilisateur *utilisateur = trouverUtilisateurParId(idUtilisateur);
     write_client(utilisateur->sock, "Commandes disponibles :\n");
     write_client(utilisateur->sock, "/login [username] [password] - Se connecter.\n");
     write_client(utilisateur->sock, "/signin [username] [password] - Créer un compte.\n");
@@ -340,9 +310,10 @@ void envoyerAide(Utilisateur *utilisateur) {
 }
 
 
-void envoyerMessagePublic(Utilisateur *expediteur, const char *message)
+void envoyerMessagePublic(int idExpediteur, const char *message)
 {
     char buffer[BUF_SIZE];
+    Utilisateur *expediteur = trouverUtilisateurParId(idExpediteur);
     snprintf(buffer, BUF_SIZE, "%s : %s\n", expediteur->username, message);
     for (int i = 0; i < nbUtilisateursConnectes; i++)
     {
@@ -350,13 +321,15 @@ void envoyerMessagePublic(Utilisateur *expediteur, const char *message)
     }
 }
 
-void playCoup(Salon *salon, Utilisateur *joueur, int caseJouee)
+void playCoup(Salon *salon, int idJoueur, int caseJouee)
 {
     Partie *partie = &salon->partie;
+    Utilisateur *joueur = trouverUtilisateurParId(idJoueur);
     int joueurIndex = (joueur == salon->joueur1) ? 0 : 1;
 
     if (salon->tourActuel != joueurIndex)
     {
+        printf("Tour actuel : %d.\n", salon->tourActuel); 
         write_client(joueur->sock, "Ce n'est pas votre tour.\n");
         return;
     }
@@ -367,13 +340,13 @@ void playCoup(Salon *salon, Utilisateur *joueur, int caseJouee)
         int tour = salon->tourActuel;
 
         // Envoyer le plateau aux deux joueurs
-        envoyer_plateau_aux_users(salon->joueur1, salon->joueur2, partie, tour);
+        envoyer_plateau_aux_users(salon->idJoueur1, salon->idJoueur2, partie, tour);
 
         // Envoyer le plateau à tous les spectateurs
         for (int i = 0; i < salon->nbSpectateurs; i++)
         {
-            Utilisateur *spectateur = salon->spectateurs[i];
-            envoyer_plateau_spectateur(spectateur, salon);
+            int idSpectateur = salon->spectateurs[i];
+            envoyer_plateau_spectateur(idSpectateur, salon);
         }
     }
     else
@@ -427,36 +400,24 @@ int verifier_identifiants(const char *username, const char *password)
     return 0; // Authentification échouée
 }
 
-void ajouter_utilisateur_connecte(const char *username)
+void traiter_public(int idUtilisateur)
 {
-    for (int i = 0; i < MAX_CLIENTS; i++)
-    {
-        if (!utilisateurs[i].isConnected) // Trouver un emplacement libre
-        {
-            strncpy(utilisateurs[i].username, username, sizeof(utilisateurs[i].username) - 1);
-            utilisateurs[i].isConnected = 1;
-            return;
-        }
-    }
-}
-
-void traiter_public(Utilisateur *utilisateur)
-{
-    
+    Utilisateur *utilisateur = trouverUtilisateurParId(idUtilisateur);
     utilisateur->estPublic = 1;
     write_client(utilisateur->sock, "Votre statut est maintenant public. Les autres joueurs peuvent observer vos parties.\n");
 }
 
-void traiter_prive(Utilisateur *utilisateur)
+void traiter_prive(int idUtilisateur)
 {
-
+    Utilisateur* utilisateur = trouverUtilisateurParId(idUtilisateur);
     utilisateur->estPublic = 0;
     write_client(utilisateur->sock, "Votre statut est maintenant privé. Seuls vos amis peuvent observer vos parties.\n");
 }
 
 
-void traiter_login(Utilisateur *utilisateur, const char *username, const char *password)
+void traiter_login(int idUtilisateur, const char *username, const char *password)
 {
+    Utilisateur *utilisateur = trouverUtilisateurParId(idUtilisateur);
     if (est_deja_connecte(username))
     {
         write_client(utilisateur->sock, "Erreur : Cet utilisateur est déjà connecté ailleurs.\n");
@@ -468,7 +429,7 @@ void traiter_login(Utilisateur *utilisateur, const char *username, const char *p
         strncpy(utilisateur->username, username, sizeof(utilisateur->username) - 1);
         write_client(utilisateur->sock, "Connexion réussie !\n");
         char buffer[BUF_SIZE] = {0};
-        snprintf(buffer, BUF_SIZE, "Bienvenue %s ! Utilisez /challenge <username> pour lancer un défi.\n", utilisateur->username);
+        snprintf(buffer, BUF_SIZE, "Bienvenue %s ! Utilisez /challenge <username> pour lancer un défi \nou /queueup pour rejoindre la file de matchmaking.\n", utilisateur->username);
         write_client(utilisateur->sock, buffer);
     }
     else
@@ -581,8 +542,9 @@ int ajouter_utilisateur(const char *username, const char *password)
     return 1; // Inscription réussie
 }
 
-void traiter_signin(Utilisateur *utilisateur, const char *username, const char *password)
+void traiter_signin(int idUtilisateur, const char *username, const char *password)
 {
+    Utilisateur *utilisateur = trouverUtilisateurParId(idUtilisateur);
     int result = ajouter_utilisateur(username, password);
     if (result == 1)
     {
@@ -618,22 +580,18 @@ void traiter_signin(Utilisateur *utilisateur, const char *username, const char *
     }
 }
 
-void supprimer_utilisateur_connecte(const char *username)
+void traiter_logout(int idUtilisateur)
 {
-    for (int i = 0; i < MAX_CLIENTS; i++)
+    Utilisateur *utilisateur = trouverUtilisateurParId(idUtilisateur);
+    printf("Utilisateur %s s'est déconnecté.\n", utilisateur->username);
+    // Si l'utilisateur est en jeu, le faire déclarer forfait
+    if (utilisateur->estEnJeu)
     {
-        if (utilisateurs[i].isConnected && strcmp(utilisateurs[i].username, username) == 0)
+        if (utilisateur->partieEnCours != NULL)
         {
-            utilisateurs[i].isConnected = 0;
-            memset(utilisateurs[i].username, 0, sizeof(utilisateurs[i].username));
-            return;
+            traiter_ff(idUtilisateur);
         }
     }
-}
-
-void traiter_logout(Utilisateur *utilisateur)
-{
-    printf("Utilisateur %s s'est déconnecté.\n", utilisateur->username);
 
     // Réinitialiser l'état de connexion
     utilisateur->isConnected = 0;
@@ -668,9 +626,10 @@ int ajouter_ligne_fichier(const char *username, const char *filename, const char
     return 1;
 }
 
-void traiter_addfriend(Utilisateur *utilisateur, const char *target_username)
+void traiter_addfriend(int idUtilisateur, const char *target_username)
 {
     // Prevent adding oneself as a friend
+    Utilisateur *utilisateur = trouverUtilisateurParId(idUtilisateur);
     if (strcmp(utilisateur->username, target_username) == 0)
     {
         write_client(utilisateur->sock, "Erreur : Vous ne pouvez pas vous ajouter en ami vous-même.\n");
@@ -779,9 +738,10 @@ int supprimer_ligne_fichier(const char *username, const char *filename, const ch
     return line_removed;
 }
 
-void traiter_faccept(Utilisateur *utilisateur, const char *friend_username)
+void traiter_faccept(int idUtilisateur, const char *friend_username)
 {
     // Path to the current user's friend file
+    Utilisateur *utilisateur = trouverUtilisateurParId(idUtilisateur);
     char friend_file[150];
     snprintf(friend_file, sizeof(friend_file), "Serveur/players/%s/friends", utilisateur->username);
 
@@ -819,9 +779,10 @@ void traiter_faccept(Utilisateur *utilisateur, const char *friend_username)
     }
 }
 
-void traiter_fdecline(Utilisateur *utilisateur, const char *friend_username)
+void traiter_fdecline(int idUtilisateur, const char *friend_username)
 {
     // Construct the line to remove from the user's friend file
+    Utilisateur *utilisateur = trouverUtilisateurParId(idUtilisateur);
     char line_to_remove[150];
     snprintf(line_to_remove, sizeof(line_to_remove), "request:%s", friend_username);
 
@@ -914,8 +875,9 @@ int save_bio_to_file(const char *username, const char *bio)
     return 1;
 }
 
-void traiter_bio(Utilisateur *utilisateur)
+void traiter_bio(int idUtilisateur)
 {
+    Utilisateur *utilisateur = trouverUtilisateurParId(idUtilisateur);
     write_client(utilisateur->sock, "Entrer votre bio (max 10 lignes). Tapez /savebio pour enregistrer :\n");
     char bio[1024] = "";
     char line[128];
@@ -973,16 +935,19 @@ void get_user_bio(const char *username, char *bio, size_t bio_size)
 }
 
 
-void traiter_search(Utilisateur *utilisateur, const char *search_username)
+void traiter_search(int idUtilisateur, const char *search_username)
 {
+    Utilisateur *utilisateur = trouverUtilisateurParId(idUtilisateur);
     if (!verifier_username(search_username))
     {
+        
         write_client(utilisateur->sock, "Utilisateur introuvable.\n");
         return;
     }
 
     // Récupérer la bio de l'utilisateur
     char bio[1024];
+    
     get_user_bio(search_username, bio, sizeof(bio));
 
     // Lire les statistiques
@@ -1022,9 +987,10 @@ void lire_relations(const char *friend_file, const char *prefix, char *output, s
     fclose(file);
 }
 
-void traiter_friends(Utilisateur *utilisateur)
+void traiter_friends(int idUtilisateur)
 {
     char friend_file[150];
+    Utilisateur *utilisateur = trouverUtilisateurParId(idUtilisateur);
     snprintf(friend_file, sizeof(friend_file), "Serveur/players/%s/friends", utilisateur->username);
 
     char output[BUF_SIZE];
@@ -1041,9 +1007,10 @@ void traiter_friends(Utilisateur *utilisateur)
     }
 }
 
-void traiter_friendrequest(Utilisateur *utilisateur)
+void traiter_friendrequest(int idUtilisateur)
 {
     char friend_file[150];
+    Utilisateur *utilisateur = trouverUtilisateurParId(idUtilisateur);
     snprintf(friend_file, sizeof(friend_file), "Serveur/players/%s/friends", utilisateur->username);
 
     char output[BUF_SIZE];
@@ -1063,8 +1030,9 @@ void traiter_friendrequest(Utilisateur *utilisateur)
     }
 }
 
-void traiter_ff(Utilisateur *utilisateur)
+void traiter_ff(int idUtilisateur)
 {
+    Utilisateur *utilisateur = trouverUtilisateurParId(idUtilisateur);
     if (utilisateur->partieEnCours == NULL || utilisateur->estEnJeu != 1)
     {
         write_client(utilisateur->sock, "Erreur : Vous n'êtes pas en jeu.\n");
@@ -1081,7 +1049,7 @@ void traiter_ff(Utilisateur *utilisateur)
     // Notifier les spectateurs
     for (int i = 0; i < salon->nbSpectateurs; i++)
     {
-        Utilisateur *spectateur = salon->spectateurs[i];
+        Utilisateur *spectateur = trouverUtilisateurParId(salon->spectateurs[i]);
         char buffer[BUF_SIZE];
         snprintf(buffer, BUF_SIZE, "Le joueur %s a abandonné la partie. Le joueur %s est déclaré vainqueur.\n",
                  utilisateur->username, adversaire->username);
@@ -1100,21 +1068,23 @@ void traiter_ff(Utilisateur *utilisateur)
     salon->statut = 2; // Partie terminée
 }
 
-void ajouter_spectateur_salon(Salon *salon, Utilisateur *spectateur)
+void ajouter_spectateur_salon(Salon *salon, int idSpectateur)
 {
+    Utilisateur *spectateur = trouverUtilisateurParId(idSpectateur);
     if (salon->nbSpectateurs >= MAX_SPECTATEURS)
     {
         write_client(spectateur->sock, "Erreur : Nombre maximum de spectateurs atteint pour cette partie.\n");
         return;
     }
 
-    salon->spectateurs[salon->nbSpectateurs++] = spectateur;
+    salon->spectateurs[salon->nbSpectateurs++] = spectateur->id;
 }
 
 
-void traiter_watch(Utilisateur *spectateur, const char *search_username)
+void traiter_watch(int idSpectateur, const char *search_username)
 {
     // Trouver l'utilisateur à observer
+    Utilisateur *spectateur = trouverUtilisateurParId(idSpectateur);
     printf("pseudo du joueur que je voeux regarer : %s\n",search_username);
     Utilisateur *joueur = trouverUtilisateurParUsername(search_username);
 
@@ -1136,16 +1106,16 @@ void traiter_watch(Utilisateur *spectateur, const char *search_username)
     write_client(spectateur->sock, "Vous regardez la partie en cours...\n");
 
     // Envoyer l'état initial du plateau au spectateur
-    envoyer_plateau_spectateur(spectateur, salon);
+    envoyer_plateau_spectateur(idSpectateur, salon);
 
     // Ajouter le spectateur à la liste des spectateurs dans le salon
-    ajouter_spectateur_salon(salon, spectateur);
+    ajouter_spectateur_salon(salon, idSpectateur);
 }
 
 void startMatchmakingGame() {
     if (queueSize >= 2) {
-        Utilisateur *player1 = queue[0];
-        Utilisateur *player2 = queue[1];
+        Utilisateur *player1 = trouverUtilisateurParId(queue[0]);
+        Utilisateur *player2 = trouverUtilisateurParId(queue[1]);
 
         // Remove players from the queue
         for (int i = 2; i < queueSize; i++) {
@@ -1157,25 +1127,26 @@ void startMatchmakingGame() {
         player2->estEnJeu = 1;
 
         // Create a new salon (game session) for the two players
-        creerSalon(player2, player1);
+        creerSalon(player2->id, player1->id);
     }
 }
 
-void joinQueue(Utilisateur *utilisateur) {
+void joinQueue(int idUtilisateur) {
+    Utilisateur *utilisateur = trouverUtilisateurParId(idUtilisateur);
     if (utilisateur->estEnJeu != 0) {
         write_client(utilisateur->sock, "Vous ne pouvez pas rejoindre la file d'attente en étant en jeu.\n");
         return;
     }
 
     for (int i = 0; i < queueSize; i++) {
-        if (queue[i] == utilisateur) {
+        if (queue[i] == idUtilisateur) {
             write_client(utilisateur->sock, "Vous êtes déjà dans la file d'attente.\n");
             return;
         }
     }
 
     if (queueSize < MAX_QUEUE) {
-        queue[queueSize++] = utilisateur;
+        queue[queueSize++] = idUtilisateur;
         utilisateur->estEnJeu = 4; // Set a special state to indicate they're in the queue
         write_client(utilisateur->sock, "Vous avez rejoint la file d'attente pour un match.\n");
 
@@ -1189,10 +1160,11 @@ void joinQueue(Utilisateur *utilisateur) {
 }
 
 // Function to remove a player from the queue
-void leaveQueue(Utilisateur *utilisateur) {
+void leaveQueue(int idUtilisateur) {
+    Utilisateur *utilisateur = trouverUtilisateurParId(idUtilisateur);
     int found = -1;
     for (int i = 0; i < queueSize; i++) {
-        if (queue[i] == utilisateur) {
+        if (queue[i] == idUtilisateur) {
             found = i;
             break;
         }
@@ -1211,8 +1183,9 @@ void leaveQueue(Utilisateur *utilisateur) {
     }
 }
 
-void traiter_msg(Utilisateur *utilisateur, char* target_username, char* msg) 
+void traiter_msg(int idUtilisateur, char* target_username, char* msg) 
 {
+    Utilisateur *utilisateur = trouverUtilisateurParId(idUtilisateur);
     Utilisateur *target = trouverUtilisateurParUsername(target_username);
     if (target == NULL) {
         write_client(utilisateur->sock, "Erreur : Utilisateur introuvable.\n");
@@ -1225,16 +1198,17 @@ void traiter_msg(Utilisateur *utilisateur, char* target_username, char* msg)
     write_client(utilisateur->sock, "Message envoyé.\n");
 }
 
-void traiter_unwatch(Utilisateur *utilisateur)
+void traiter_unwatch(int idUtilisateur)
 {
     // Vérifiez si l'utilisateur est un spectateur
+    Utilisateur *utilisateur = trouverUtilisateurParId(idUtilisateur);  
     int found = 0;
     for (int i = 0; i < nbSalons; i++)
     {
         Salon *salon = &salons[i];
         for (int j = 0; j < salon->nbSpectateurs; j++)
         {
-            if (salon->spectateurs[j] == utilisateur)
+            if (salon->spectateurs[j] == utilisateur->id)
             {
                 found = 1;
 
@@ -1263,8 +1237,9 @@ void traiter_unwatch(Utilisateur *utilisateur)
 }
 
 
-void traiterMessage(Utilisateur *utilisateur, char *message)
+void traiterMessage(int idUtilisateur, char *message)
 {
+    Utilisateur *utilisateur = trouverUtilisateurParId(idUtilisateur);
     if (utilisateur->isConnected)
     {
         if (strncmp(message, "/challenge ", 11) == 0)
@@ -1335,7 +1310,7 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
             else
             {
                 // Créer un salon pour la partie
-                creerSalon(challenger, utilisateur);
+                creerSalon(utilisateur->idchallenger, idUtilisateur);
 
                 // Nettoyer les états de défi pour les deux utilisateurs
                 utilisateur->challenger = NULL;
@@ -1392,7 +1367,7 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
         {
             int caseJouee = atoi(message + 6) - 1;
             Salon *salon = utilisateur->partieEnCours;
-            playCoup(salon, utilisateur, caseJouee);
+            playCoup(salon, idUtilisateur, caseJouee);
         }
         else if (strcmp(message, "/list") == 0)
         {
@@ -1406,14 +1381,14 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
         }
         else if (strcmp(message, "/friendrequest") == 0)
         {
-            traiter_friendrequest(utilisateur);
+            traiter_friendrequest(idUtilisateur);
         }
         else if (strncmp(message, "/search ", 7) == 0)
         {
             char search_username[50];
             if (sscanf(message + 8, "%49s", search_username) == 1)
             {
-                traiter_search(utilisateur, search_username);
+                traiter_search(idUtilisateur, search_username);
             }
             else
             {
@@ -1422,15 +1397,15 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
         }
         else if (strcmp(message, "/queueup") == 0)
         {
-            joinQueue(utilisateur);
+            joinQueue(idUtilisateur);
         }
         else if (strcmp(message, "/leavequeue") == 0)
         {
-            leaveQueue(utilisateur);
+            leaveQueue(idUtilisateur);
         }
         else if (strcmp(message, "/help") == 0)
         {
-            envoyerAide(utilisateur);
+            envoyerAide(idUtilisateur);
         }
         else if (strncmp(message, "/login ", 7) == 0)
         {
@@ -1442,18 +1417,18 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
         }
         else if (strcmp(message, "/logout") == 0)
         {
-            traiter_logout(utilisateur);
+            traiter_logout(idUtilisateur);
         }
         else if (strncmp(message, "/bio", 4) == 0)
         {
-            traiter_bio(utilisateur);
+            traiter_bio(idUtilisateur);
         }
         else if (strncmp(message, "/addfriend ", 11) == 0)
         {
             char target_username[50];
             if (sscanf(message + 11, "%49s", target_username) == 1)
             {
-                traiter_addfriend(utilisateur, target_username);
+                traiter_addfriend(idUtilisateur, target_username);
             }
             else
             {
@@ -1462,14 +1437,14 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
         }
         else if (strcmp(message, "/friends") == 0)
         {
-            traiter_friends(utilisateur);
+            traiter_friends(idUtilisateur);
         }
         else if (strncmp(message, "/faccept ", 9) == 0)
         {
             char friend_username[50];
             if (sscanf(message + 9, "%49s", friend_username) == 1)
             {
-                traiter_faccept(utilisateur, friend_username);
+                traiter_faccept(idUtilisateur, friend_username);
             }
             else
             {
@@ -1481,7 +1456,7 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
             char friend_username[50];
             if (sscanf(message + 9, "%49s", friend_username) == 1)
             {
-                traiter_fdecline(utilisateur, friend_username);
+                traiter_fdecline(idUtilisateur, friend_username);
             }
             else
             {
@@ -1490,21 +1465,21 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
         }
         else if (strcmp(message, "/public") == 0)
         {
-            traiter_public(utilisateur);
+            traiter_public(idUtilisateur);
         }
         else if (strcmp(message, "/private") == 0)
         {
-            traiter_prive(utilisateur);
+            traiter_prive(idUtilisateur);
         }
 
         else if (strcmp(message, "/profile") == 0)
         {
-            traiter_search(utilisateur, utilisateur->username);
+            traiter_search(idUtilisateur, utilisateur->username);
             // Afficher mon profil
         }
         else if ((strcmp(message, "/ff") == 0) && utilisateur->estEnJeu)
         {
-            traiter_ff(utilisateur);
+            traiter_ff(idUtilisateur);
             // traiter_search(utilisateur, utilisateur->username);
             // Afficher mon profil
         }
@@ -1518,7 +1493,7 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
             char search_username[50];
             if (sscanf(message + 7, "%49s", search_username) == 1) // Décalage de 7 pour ignorer "/watch "
             {
-                traiter_watch(utilisateur, search_username);
+                traiter_watch(idUtilisateur, search_username);
             }
             else
             {
@@ -1530,7 +1505,7 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
             char target_username[50], msg[BUF_SIZE];
             if (sscanf(message + 5, "%49s %999[^\n]", target_username, msg) == 2)
             {
-                traiter_msg(utilisateur, target_username, msg);
+                traiter_msg(idUtilisateur, target_username, msg);
             }
             else
             {
@@ -1539,12 +1514,12 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
         }
         else if (strcmp(message, "/unwatch") == 0)
         {
-            traiter_unwatch(utilisateur);
+            traiter_unwatch(idUtilisateur);
         }
 
         else
         {
-            envoyerMessagePublic(utilisateur, message);
+            envoyerMessagePublic(idUtilisateur, message);
         }
     }
     else if (!utilisateur->isConnected)
@@ -1554,7 +1529,7 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
             char username[50], password[50];
             if (sscanf(message + 7, "%49s %49s", username, password) == 2)
             {
-                traiter_login(utilisateur, username, password);
+                traiter_login(idUtilisateur, username, password);
             }
             else
             {
@@ -1566,7 +1541,7 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
             char username[50], password[50];
             if (sscanf(message + 8, "%49s %49s", username, password) == 2)
             {
-                traiter_signin(utilisateur, username, password);
+                traiter_signin(idUtilisateur, username, password);
             }
             else
             {
@@ -1635,6 +1610,7 @@ static void app(void)
             if (nbUtilisateursConnectes < MAX_CLIENTS)
             {
                 utilisateur = &utilisateurs[nbUtilisateursConnectes++];
+                utilisateur->id = nextUserId++;
                 utilisateur->sock = csock;
                 utilisateur->estEnJeu = 0;
                 utilisateur->partieEnCours = NULL;
@@ -1665,7 +1641,7 @@ static void app(void)
 
                     if (utilisateur->estEnJeu && utilisateur->partieEnCours != NULL)
                     {
-                        traiter_ff(utilisateur); // Appeler traiter_ff pour enregistrer l'abandon
+                        traiter_ff(utilisateur->id); // Appeler traiter_ff pour enregistrer l'abandon
                     }
 
                     // Réinitialiser les états
@@ -1688,7 +1664,7 @@ static void app(void)
                 else
                 {
                     // Traiter le message de l'utilisateur
-                    traiterMessage(utilisateur, buffer);
+                    traiterMessage(utilisateur->id, buffer);
                 }
             }
         }
