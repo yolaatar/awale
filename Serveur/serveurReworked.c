@@ -43,9 +43,10 @@ Utilisateur utilisateurs[MAX_CLIENTS];
 int nbUtilisateursConnectes = 0;
 int nbSalons = 0;
 static int nextUserId = 1; 
+static int nextSalonId = 1;
 
 void mettre_a_jour_statistiques(const char *username, int match_increment, int win_increment, int loss_increment);
-void envoyer_plateau_spectateur(int idSpectateur, Salon *salon);
+void envoyer_plateau_spectateur(int idSpectateur, int idSalon);
 
 
 void initialiserUtilisateurs(void)
@@ -68,14 +69,16 @@ void initialiserSalons(void)
         salons[i].joueur1 = NULL;
         salons[i].joueur2 = NULL;
         salons[i].statut = 0;
+        salons[i].nbSpectateurs = 0;
+        salons[i].id = nextSalonId++;
     }
 }
 
-void envoyer_plateau_spectateur(int idSpectateur, Salon *salon)
+void envoyer_plateau_spectateur(int idSpectateur, int idSalon)
 {
     char buffer[BUF_SIZE];
     Utilisateur *spectateur = trouverUtilisateurParId(idSpectateur);
-    
+    Salon *salon = trouverSalonParId(idSalon);
 
     snprintf(buffer, BUF_SIZE, "  ---------------------------------\n");
     snprintf(buffer + strlen(buffer), BUF_SIZE - strlen(buffer),
@@ -194,16 +197,20 @@ void creerSalon(int idJoueur1, int idJoueur2)
         // print l'état du touractuel
         printf("Tour actuel quand je crée la partie : %d\n", salon->tourActuel);
         salon->joueur2 = joueur1;
+        salon->idJoueur2 = idJoueur1;
         strcpy(salon->partie.joueur2.pseudo, joueur1->username);
         salon->joueur1 = joueur2;
+        salon->idJoueur1 = idJoueur2;
         strcpy(salon->partie.joueur1.pseudo, joueur2->username);
         salon->tourActuel = 1;
     }
     else
     {
         salon->joueur1 = joueur1;
+        salon->idJoueur1 = idJoueur1;
         strcpy(salon->partie.joueur1.pseudo, joueur1->username);
         salon->joueur2 = joueur2;
+        salon->idJoueur2 = idJoueur2;
         strcpy(salon->partie.joueur2.pseudo, joueur2->username);
         salon->tourActuel = 0;
         
@@ -215,6 +222,8 @@ void creerSalon(int idJoueur1, int idJoueur2)
     joueur2->estEnJeu = 1;
     joueur1->partieEnCours = salon;
     joueur2->partieEnCours = salon;
+    joueur1->idPartieEnCours = salon->id;
+    joueur2->idPartieEnCours = salon->id;
 
     envoyer_plateau_aux_users(idJoueur1, idJoueur2, &salon->partie, tour);
 }
@@ -243,8 +252,20 @@ Utilisateur *trouverUtilisateurParId(int idjoueur)
     return NULL; // Aucun utilisateur trouvé
 }
 
-void terminerPartie(Salon *salon)
+Salon *trouverSalonParId(int idSalon)
 {
+    for (int i = 0; i < nbSalons; i++)
+    {
+        if (salons[i].id == idSalon)
+        {
+            return &salons[i];
+        }
+    }
+    return NULL; // Aucun salon trouvé
+}
+void terminerPartie(int idSalon)
+{
+    Salon *salon = trouverSalonParId(idSalon);
     salon->statut = 2;
     salon->joueur1->estEnJeu = 0;
     salon->joueur2->estEnJeu = 0;
@@ -321,15 +342,35 @@ void envoyerMessagePublic(int idExpediteur, const char *message)
     }
 }
 
-void playCoup(Salon *salon, int idJoueur, int caseJouee)
+void playCoup(int idSalon, int idJoueur, int caseJouee)
 {
+    Salon *salon = trouverSalonParId(idSalon);
+    if (salon == NULL)
+    {
+        printf("Salon is NULL.\n");
+        return;
+    }
+
     Partie *partie = &salon->partie;
+    if (partie == NULL)
+    {
+        printf("Partie is NULL.\n");
+        return;
+    }
+
     Utilisateur *joueur = trouverUtilisateurParId(idJoueur);
-    int joueurIndex = (joueur == salon->joueur1) ? 0 : 1;
+    if (joueur == NULL)
+    {
+        printf("Joueur is NULL.\n");
+        return;
+    }
+
+    int joueurIndex = (idJoueur == salon->idJoueur1) ? 0 : 1;
 
     if (salon->tourActuel != joueurIndex)
     {
         printf("Tour actuel : %d.\n", salon->tourActuel); 
+        printf("Joueur index : %d.\n", joueurIndex);
         write_client(joueur->sock, "Ce n'est pas votre tour.\n");
         return;
     }
@@ -346,7 +387,7 @@ void playCoup(Salon *salon, int idJoueur, int caseJouee)
         for (int i = 0; i < salon->nbSpectateurs; i++)
         {
             int idSpectateur = salon->spectateurs[i];
-            envoyer_plateau_spectateur(idSpectateur, salon);
+            envoyer_plateau_spectateur(idSpectateur, idSalon);
         }
     }
     else
@@ -356,7 +397,7 @@ void playCoup(Salon *salon, int idJoueur, int caseJouee)
 
     if (verifierFinPartie(partie))
     {
-        terminerPartie(salon);
+        terminerPartie(idSalon);
     }
 }
 
@@ -540,6 +581,28 @@ int ajouter_utilisateur(const char *username, const char *password)
 
 
     return 1; // Inscription réussie
+}
+
+void traiter_listeparties(int idUtilisateur)
+{
+    Utilisateur *utilisateur = trouverUtilisateurParId(idUtilisateur);
+    char buffer[BUF_SIZE];
+    snprintf(buffer, BUF_SIZE, "Liste des parties en cours :\n");
+    int partiesEnCours = 0;
+    for (int i = 0; i < nbSalons; i++)
+    {
+        if (salons[i].statut == 1)
+        {
+            snprintf(buffer + strlen(buffer), BUF_SIZE - strlen(buffer),
+                     "Salon %d : %s vs %s\n", salons[i].id, salons[i].joueur1->username, salons[i].joueur2->username);
+            partiesEnCours = 1;
+        }
+    }
+    if (!partiesEnCours)
+    {
+        snprintf(buffer + strlen(buffer), BUF_SIZE - strlen(buffer), "Aucune partie en cours.\n");
+    }
+    write_client(utilisateur->sock, buffer);
 }
 
 void traiter_signin(int idUtilisateur, const char *username, const char *password)
@@ -1039,7 +1102,7 @@ void traiter_ff(int idUtilisateur)
         return;
     }
 
-    Salon *salon = utilisateur->partieEnCours;
+    Salon *salon = trouverSalonParId(utilisateur->idPartieEnCours);
     Utilisateur *adversaire = (salon->joueur1 == utilisateur) ? salon->joueur2 : salon->joueur1;
 
     // Notifier les joueurs
@@ -1068,8 +1131,9 @@ void traiter_ff(int idUtilisateur)
     salon->statut = 2; // Partie terminée
 }
 
-void ajouter_spectateur_salon(Salon *salon, int idSpectateur)
+void ajouter_spectateur_salon(int idSalon, int idSpectateur)
 {
+    Salon *salon = trouverSalonParId(idSalon);
     Utilisateur *spectateur = trouverUtilisateurParId(idSpectateur);
     if (salon->nbSpectateurs >= MAX_SPECTATEURS)
     {
@@ -1101,15 +1165,13 @@ void traiter_watch(int idSpectateur, const char *search_username)
     }
 
     // Ajouter le spectateur à la liste des spectateurs
-    Salon *salon = joueur->partieEnCours;
-
     write_client(spectateur->sock, "Vous regardez la partie en cours...\n");
 
     // Envoyer l'état initial du plateau au spectateur
-    envoyer_plateau_spectateur(idSpectateur, salon);
+    envoyer_plateau_spectateur(idSpectateur, joueur->idPartieEnCours);
 
     // Ajouter le spectateur à la liste des spectateurs dans le salon
-    ajouter_spectateur_salon(salon, idSpectateur);
+    ajouter_spectateur_salon(joueur->idPartieEnCours, idSpectateur);
 }
 
 void startMatchmakingGame() {
@@ -1280,6 +1342,8 @@ void traiterMessage(int idUtilisateur, char *message)
                 // Définir le défi en attente
                 adversaire->challenger = utilisateur;
                 utilisateur->challenger = adversaire;
+                utilisateur->idchallenger = adversaire->id;
+                adversaire->idchallenger = utilisateur->id;
                 utilisateur->estEnJeu = 2;
                 adversaire->estEnJeu = 3;
 
@@ -1292,18 +1356,17 @@ void traiterMessage(int idUtilisateur, char *message)
         }
         else if (strcmp(message, "/accept") == 0)
         {
-            if (utilisateur->challenger == NULL)
+            Utilisateur *challenger = trouverUtilisateurParId(utilisateur->idchallenger);
+            if (challenger == NULL)
             {
                 write_client(utilisateur->sock, "Erreur : Vous n'avez pas de défi à accepter.\n");
                 return;
             }
-            Utilisateur *challenger = utilisateur->challenger;
-
             if (utilisateur->estEnJeu == 1)
             {
                 write_client(utilisateur->sock, "Vous êtes déjà en jeu.\n");
             }
-            else if (challenger->estEnJeu == 1)
+            else if (challenger == NULL || challenger->estEnJeu == 1)
             {
                 write_client(utilisateur->sock, "Votre adversaire est déjà en jeu.\n");
             }
@@ -1366,8 +1429,12 @@ void traiterMessage(int idUtilisateur, char *message)
         else if (strncmp(message, "/play ", 6) == 0 && utilisateur->estEnJeu)
         {
             int caseJouee = atoi(message + 6) - 1;
-            Salon *salon = utilisateur->partieEnCours;
-            playCoup(salon, idUtilisateur, caseJouee);
+            Salon *salon = trouverSalonParId(utilisateur->idPartieEnCours);
+            if (salon != NULL) {
+                playCoup(salon->id, idUtilisateur, caseJouee);
+            } else {
+                write_client(utilisateur->sock, "Erreur : Salon introuvable.\n");
+            }
         }
         else if (strcmp(message, "/list") == 0)
         {
@@ -1476,6 +1543,9 @@ void traiterMessage(int idUtilisateur, char *message)
         {
             traiter_search(idUtilisateur, utilisateur->username);
             // Afficher mon profil
+        }
+        else if (strcmp(message, "/listepartie") == 0) {
+            traiter_listeparties(idUtilisateur);
         }
         else if ((strcmp(message, "/ff") == 0) && utilisateur->estEnJeu)
         {

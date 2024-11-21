@@ -46,6 +46,7 @@ typedef struct in_addr IN_ADDR;
 typedef struct Utilisateur Utilisateur;
 
 typedef struct {
+    int id;
     Utilisateur *joueur1;
     Utilisateur *joueur2;
     int idJoueur1;
@@ -67,6 +68,7 @@ struct Utilisateur {
     int estEnJeu;         // 0 : pas en jeu, 1 : en jeu, 2 : défi lancé
     int isConnected;      // 1 : connecté, 0 : déconnecté
     Salon *partieEnCours; // NULL si pas en jeu
+    int idPartieEnCours;
     Joueur *joueur;       // Pointeur vers Joueur1 ou Joueur2
     Utilisateur *challenger; // Défi lancé par cet utilisateur
     int idchallenger;
@@ -93,12 +95,13 @@ static void remove_client(Client *clients, int to_remove, int *actual);
 static void clear_clients(Client *clients, int actual);
 
 Utilisateur *trouverUtilisateurParId(int idjoueur);
+Salon *trouverSalonParId(int idSalon);
 void initialiserUtilisateurs(void);
 void initialiserSalons(void);
 void creerSalon(int idJoueur1, int idJoueur2);
-void terminerPartie(Salon *salon);
+void terminerPartie(int idSalon);
 void traiter_ff(int idUtilisateur);
-void envoyer_plateau_spectateur(int idSpectateur, Salon *salon);
+void envoyer_plateau_spectateur(int idSpectateur, int idSalon);
 void envoyer_plateau_aux_users(int idJoueur1, int idJoueur2, Partie *partie, int tour);
 void mettre_a_jour_statistiques(const char *username, int match_increment, int win_increment, int loss_increment);
 Utilisateur *trouverUtilisateurParUsername(const char *username);
