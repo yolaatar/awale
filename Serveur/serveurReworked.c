@@ -274,8 +274,7 @@ Utilisateur *trouverUtilisateurParUsername(const char *username)
     return NULL; // Aucun utilisateur trouvé
 }
 
-void terminerPartie(Salon *salon)
-{
+void terminerPartie(Salon *salon) {
     salon->statut = 2;
     salon->joueur1->estEnJeu = 0;
     salon->joueur2->estEnJeu = 0;
@@ -284,34 +283,72 @@ void terminerPartie(Salon *salon)
     salon->joueur1->challenger = NULL;
     salon->joueur2->challenger = NULL;
 
-    write_client(salon->joueur1->sock, "La partie est terminée.\n");
-    write_client(salon->joueur2->sock, "La partie est terminée.\n");
+    char resultat[256];
 
-    if (salon->partie.joueur1.score > salon->partie.joueur2.score)
-    {
+    if (salon->partie.joueur1.score > salon->partie.joueur2.score) {
+        snprintf(resultat, sizeof(resultat), "Victoire de %s", salon->joueur1->username);
         write_client(salon->joueur1->sock, "Vous avez gagné !\n");
         write_client(salon->joueur2->sock, "Vous avez perdu.\n");
-
         mettre_a_jour_statistiques(salon->joueur1->username, 1, 1, 0);
         mettre_a_jour_statistiques(salon->joueur2->username, 1, 0, 1);
-    }
-    else if (salon->partie.joueur1.score < salon->partie.joueur2.score)
-    {
+    } else if (salon->partie.joueur1.score < salon->partie.joueur2.score) {
+        snprintf(resultat, sizeof(resultat), "Victoire de %s", salon->joueur2->username);
         write_client(salon->joueur1->sock, "Vous avez perdu.\n");
         write_client(salon->joueur2->sock, "Vous avez gagné !\n");
-
         mettre_a_jour_statistiques(salon->joueur1->username, 1, 0, 1);
         mettre_a_jour_statistiques(salon->joueur2->username, 1, 1, 0);
-    }
-    else
-    {
+    } else {
+        snprintf(resultat, sizeof(resultat), "Match nul");
         write_client(salon->joueur1->sock, "Match nul !\n");
         write_client(salon->joueur2->sock, "Match nul !\n");
-
         mettre_a_jour_statistiques(salon->joueur1->username, 1, 0, 0);
         mettre_a_jour_statistiques(salon->joueur2->username, 1, 0, 0);
     }
+
+    // Appeler sauvegarderPartie
+    sauvegarderPartie(&salon->partie, salon->joueur1->username, salon->joueur2->username, resultat);
 }
+
+
+void sauvegarderPartie(Partie *partie, const char *username1, const char *username2, const char *resultat) {
+    // Dossiers des deux joueurs
+    char filepath1[256], filepath2[256];
+    snprintf(filepath1, sizeof(filepath1), "Serveur/players/%s/%s_vs_%s.txt", username1, username1, username2);
+    snprintf(filepath2, sizeof(filepath2), "Serveur/players/%s/%s_vs_%s.txt", username2, username1, username2);
+
+    FILE *file1 = fopen(filepath1, "w");
+    FILE *file2 = fopen(filepath2, "w");
+
+    if (!file1 || !file2) {
+        perror("Erreur lors de l'ouverture des fichiers pour sauvegarde");
+        if (file1) fclose(file1);
+        if (file2) fclose(file2);
+        return;
+    }
+
+    // Informations de base
+    fprintf(file1, "Partie entre %s et %s\n", username1, username2);
+    fprintf(file2, "Partie entre %s et %s\n", username1, username2);
+
+    fprintf(file1, "Coups joués :\n");
+    fprintf(file2, "Coups joués :\n");
+
+    // Sauvegarde des coups joués
+    for (int i = 0; i < partie->indexCoups; i++) {
+        int joueur = (i % 2 == 0) ? 1 : 2; // Alternance entre joueur 1 et joueur 2
+        int caseJouee = partie->coups[i] + 1; // Cases sont indexées de 0, +1 pour correspondre au jeu
+        fprintf(file1, "Joueur %d joue case %d\n", joueur, caseJouee);
+        fprintf(file2, "Joueur %d joue case %d\n", joueur, caseJouee);
+    }
+
+    // Ajout du résultat
+    fprintf(file1, "Résultat : %s\n", resultat);
+    fprintf(file2, "Résultat : %s\n", resultat);
+
+    fclose(file1);
+    fclose(file2);
+}
+
 
 
 void envoyerAide(Utilisateur *utilisateur) {
@@ -363,6 +400,10 @@ void playCoup(Salon *salon, Utilisateur *joueur, int caseJouee)
 
     else if (jouerCoup(partie, caseJouee, joueurIndex + 1) == 0)
     {
+        if (partie->indexCoups < 500) {  // Évitez de dépasser la capacité du tableau
+            partie->coups[partie->indexCoups] = caseJouee;
+            partie->indexCoups++;
+        }
         salon->tourActuel = (salon->tourActuel + 1) % 2;
         int tour = salon->tourActuel;
 
@@ -1063,10 +1104,8 @@ void traiter_friendrequest(Utilisateur *utilisateur)
     }
 }
 
-void traiter_ff(Utilisateur *utilisateur)
-{
-    if (utilisateur->partieEnCours == NULL || utilisateur->estEnJeu != 1)
-    {
+void traiter_ff(Utilisateur *utilisateur) {
+    if (utilisateur->partieEnCours == NULL || utilisateur->estEnJeu != 1) {
         write_client(utilisateur->sock, "Erreur : Vous n'êtes pas en jeu.\n");
         return;
     }
@@ -1079,8 +1118,7 @@ void traiter_ff(Utilisateur *utilisateur)
     write_client(adversaire->sock, "Votre adversaire a abandonné la partie. Victoire enregistrée.\n");
 
     // Notifier les spectateurs
-    for (int i = 0; i < salon->nbSpectateurs; i++)
-    {
+    for (int i = 0; i < salon->nbSpectateurs; i++) {
         Utilisateur *spectateur = salon->spectateurs[i];
         char buffer[BUF_SIZE];
         snprintf(buffer, BUF_SIZE, "Le joueur %s a abandonné la partie. Le joueur %s est déclaré vainqueur.\n",
@@ -1090,7 +1128,12 @@ void traiter_ff(Utilisateur *utilisateur)
 
     // Mettre à jour les statistiques
     mettre_a_jour_statistiques(utilisateur->username, 1, 0, 1); // Défaite pour l'utilisateur
-    mettre_a_jour_statistiques(adversaire->username, 1, 1, 0); // Victoire pour l'adversaire
+    mettre_a_jour_statistiques(adversaire->username, 1, 1, 0);  // Victoire pour l'adversaire
+
+    // Sauvegarder la partie
+    char resultat[256];
+    snprintf(resultat, sizeof(resultat), "Le joueur %s a abandonné. Victoire de %s.", utilisateur->username, adversaire->username);
+    sauvegarderPartie(&salon->partie, salon->joueur1->username, salon->joueur2->username, resultat);
 
     // Réinitialiser l'état des joueurs et du salon
     utilisateur->estEnJeu = 0;
@@ -1099,6 +1142,7 @@ void traiter_ff(Utilisateur *utilisateur)
     adversaire->partieEnCours = NULL;
     salon->statut = 2; // Partie terminée
 }
+
 
 void ajouter_spectateur_salon(Salon *salon, Utilisateur *spectateur)
 {
