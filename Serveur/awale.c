@@ -19,6 +19,8 @@ typedef struct {
     Joueur joueur1;
     Joueur joueur2;
     Plateau historique[500];
+    int coups[500];       // Liste des cases jouées (index des cases)
+    int indexCoups;    
 } Partie;
 
 int initialiserPartie(Partie *partie) {
@@ -38,6 +40,7 @@ int initialiserPartie(Partie *partie) {
 
     partie->joueur1.score = 0;
     partie->joueur2.score = 0;
+    partie->indexCoups = 0;
     return 0;
 }
 

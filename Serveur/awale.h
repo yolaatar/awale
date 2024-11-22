@@ -28,6 +28,8 @@ typedef struct {
     Plateau historique[100] ;
     int tourActuel ;   
     int statut ; 
+    int coups[500];       // Liste des cases jouées (index des cases)
+    int indexCoups;       // Nombre de coups joués (indice actuel)
 } Partie;
 
 // Déclarations de fonctions

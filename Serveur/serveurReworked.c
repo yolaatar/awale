@@ -15,6 +15,37 @@
 // Déclaration anticipée de Utilisateur
 typedef struct Utilisateur Utilisateur;
 
+typedef struct
+{
+    Utilisateur *joueur1;
+    Utilisateur *joueur2;
+    Partie partie;
+    int tourActuel; // 0 pour joueur1, 1 pour joueur2
+    int statut;     // 0 pour attente, 1 pour en cours, 2 pour terminé
+    Utilisateur *spectateurs[MAX_SPECTATEURS];
+    int nbSpectateurs;
+} Salon;
+
+typedef struct {
+    char username[50];
+    float win_rate;
+} JoueurClassement;
+
+struct Utilisateur
+{
+    SOCKET sock;
+    int id;
+    char pseudo[20];
+    char username[50];
+    char password[50];
+    int estPublic;        // 1 si l'utilisateur est public, 0 s'il est privé
+    int estEnJeu;         // 1 si en jeu, 0 si il ne l'est pas et 2 si il a déjà lancé un défi
+    int isConnected;      // 1 si connecté, 0 sinon
+    Salon *partieEnCours; // NULL si le joueur n'est pas en jeu
+    Joueur *joueur;       // Pointeur vers le joueur (Joueur1 ou Joueur2) dans une partie
+    Utilisateur *challenger;
+};
+
 static void init(void)
 {
 #ifdef WIN32
@@ -47,6 +78,10 @@ static int nextSalonId = 1;
 
 void mettre_a_jour_statistiques(const char *username, int match_increment, int win_increment, int loss_increment);
 void envoyer_plateau_spectateur(int idSpectateur, int idSalon);
+void sauvegarderPartie(Partie *partie, const char *username1, const char *username2, const char *resultat);
+void lire_statistiques(const char *username, int *matches, int *wins, int *losses);
+
+
 
 
 void initialiserUtilisateurs(void)
@@ -263,9 +298,15 @@ Salon *trouverSalonParId(int idSalon)
     }
     return NULL; // Aucun salon trouvé
 }
+
 void terminerPartie(int idSalon)
 {
     Salon *salon = trouverSalonParId(idSalon);
+    if (!salon) {
+        printf("Erreur : Salon introuvable avec l'ID %d\n", idSalon);
+        return;
+    }
+
     salon->statut = 2;
     salon->joueur1->estEnJeu = 0;
     salon->joueur2->estEnJeu = 0;
@@ -274,34 +315,73 @@ void terminerPartie(int idSalon)
     salon->joueur1->challenger = NULL;
     salon->joueur2->challenger = NULL;
 
-    write_client(salon->joueur1->sock, "La partie est terminée.\n");
-    write_client(salon->joueur2->sock, "La partie est terminée.\n");
+    char resultat[256];
 
-    if (salon->partie.joueur1.score > salon->partie.joueur2.score)
-    {
+    if (salon->partie.joueur1.score > salon->partie.joueur2.score) {
+        snprintf(resultat, sizeof(resultat), "Victoire de %s", salon->joueur1->username);
         write_client(salon->joueur1->sock, "Vous avez gagné !\n");
         write_client(salon->joueur2->sock, "Vous avez perdu.\n");
-
         mettre_a_jour_statistiques(salon->joueur1->username, 1, 1, 0);
         mettre_a_jour_statistiques(salon->joueur2->username, 1, 0, 1);
-    }
-    else if (salon->partie.joueur1.score < salon->partie.joueur2.score)
-    {
+    } else if (salon->partie.joueur1.score < salon->partie.joueur2.score) {
+        snprintf(resultat, sizeof(resultat), "Victoire de %s", salon->joueur2->username);
         write_client(salon->joueur1->sock, "Vous avez perdu.\n");
         write_client(salon->joueur2->sock, "Vous avez gagné !\n");
-
         mettre_a_jour_statistiques(salon->joueur1->username, 1, 0, 1);
         mettre_a_jour_statistiques(salon->joueur2->username, 1, 1, 0);
-    }
-    else
-    {
+    } else {
+        snprintf(resultat, sizeof(resultat), "Match nul");
         write_client(salon->joueur1->sock, "Match nul !\n");
         write_client(salon->joueur2->sock, "Match nul !\n");
-
         mettre_a_jour_statistiques(salon->joueur1->username, 1, 0, 0);
         mettre_a_jour_statistiques(salon->joueur2->username, 1, 0, 0);
     }
+
+    // Appeler sauvegarderPartie
+    sauvegarderPartie(&salon->partie, salon->joueur1->username, salon->joueur2->username, resultat);
 }
+
+
+
+void sauvegarderPartie(Partie *partie, const char *username1, const char *username2, const char *resultat) {
+    // Dossiers des deux joueurs
+    char filepath1[256], filepath2[256];
+    snprintf(filepath1, sizeof(filepath1), "Serveur/players/%s/%s_vs_%s.txt", username1, username1, username2);
+    snprintf(filepath2, sizeof(filepath2), "Serveur/players/%s/%s_vs_%s.txt", username2, username1, username2);
+
+    FILE *file1 = fopen(filepath1, "w");
+    FILE *file2 = fopen(filepath2, "w");
+
+    if (!file1 || !file2) {
+        perror("Erreur lors de l'ouverture des fichiers pour sauvegarde");
+        if (file1) fclose(file1);
+        if (file2) fclose(file2);
+        return;
+    }
+
+    // Informations de base
+    fprintf(file1, "Partie entre %s et %s\n", username1, username2);
+    fprintf(file2, "Partie entre %s et %s\n", username1, username2);
+
+    fprintf(file1, "Coups joués :\n");
+    fprintf(file2, "Coups joués :\n");
+
+    // Sauvegarde des coups joués
+    for (int i = 0; i < partie->indexCoups; i++) {
+        int joueur = (i % 2 == 0) ? 1 : 2; // Alternance entre joueur 1 et joueur 2
+        int caseJouee = partie->coups[i] + 1; // Cases sont indexées de 0, +1 pour correspondre au jeu
+        fprintf(file1, "Joueur %d joue case %d\n", joueur, caseJouee);
+        fprintf(file2, "Joueur %d joue case %d\n", joueur, caseJouee);
+    }
+
+    // Ajout du résultat
+    fprintf(file1, "Résultat : %s\n", resultat);
+    fprintf(file2, "Résultat : %s\n", resultat);
+
+    fclose(file1);
+    fclose(file2);
+}
+
 
 
 void envoyerAide(int idUtilisateur) {
@@ -328,6 +408,8 @@ void envoyerAide(int idUtilisateur) {
     write_client(utilisateur->sock, "/friendrequest - Voir vos demandes d'amis en attente.\n");
     write_client(utilisateur->sock, "/bio - Modifier votre bio.\n");
     write_client(utilisateur->sock, "/msg [username] [message] - Envoyer un message privé.\n");
+    write_client(utilisateur->sock, "/leaderboard : Afficher le top 3 des joueurs en fonction de leur winrate.\n");
+    
 }
 
 
@@ -377,6 +459,10 @@ void playCoup(int idSalon, int idJoueur, int caseJouee)
 
     else if (jouerCoup(partie, caseJouee, joueurIndex + 1) == 0)
     {
+        if (partie->indexCoups < 500) {  // Évitez de dépasser la capacité du tableau
+            partie->coups[partie->indexCoups] = caseJouee;
+            partie->indexCoups++;
+        }
         salon->tourActuel = (salon->tourActuel + 1) % 2;
         int tour = salon->tourActuel;
 
@@ -669,6 +755,65 @@ void traiter_logout(int idUtilisateur)
     utilisateur->sock = INVALID_SOCKET;
 }
 
+void afficherClassementTop3(Utilisateur *utilisateur) {
+    JoueurClassement joueurs[MAX_CLIENTS];
+    int nbJoueurs = 0;
+
+    // Chemin du fichier des utilisateurs
+    char user_file[] = "Serveur/utilisateurs.txt";
+
+    FILE *file = fopen(user_file, "r");
+    if (!file) {
+        perror("Erreur lors de l'ouverture du fichier utilisateurs.txt");
+        write_client(utilisateur->sock, "Erreur : Impossible d'accéder aux informations des utilisateurs.\n");
+        return;
+    }
+
+    char line[256];
+    while (fgets(line, sizeof(line), file)) {
+        char username[50];
+        if (sscanf(line, "%*d,%49[^,],%*s", username) == 1) {
+            int matches = 0, wins = 0, losses = 0;
+            lire_statistiques(username, &matches, &wins, &losses);
+
+            if (matches > 0) {
+                float win_rate = (float)wins / matches;
+                strncpy(joueurs[nbJoueurs].username, username, sizeof(joueurs[nbJoueurs].username) - 1);
+                joueurs[nbJoueurs].win_rate = win_rate;
+                nbJoueurs++;
+            }
+        }
+    }
+    fclose(file);
+
+    // Trier les joueurs par win_rate décroissant
+    for (int i = 0; i < nbJoueurs - 1; i++) {
+        for (int j = i + 1; j < nbJoueurs; j++) {
+            if (joueurs[j].win_rate > joueurs[i].win_rate) {
+                JoueurClassement temp = joueurs[i];
+                joueurs[i] = joueurs[j];
+                joueurs[j] = temp;
+            }
+        }
+    }
+
+    // Envoyer le classement au client
+    char buffer[BUF_SIZE];
+    snprintf(buffer, BUF_SIZE, "Classement global des meilleurs joueurs (Top 3) :\n");
+    write_client(utilisateur->sock, buffer);
+
+    for (int i = 0; i < nbJoueurs && i < 3; i++) {
+        snprintf(buffer, BUF_SIZE, "%d. %s - Ratio de victoires : %.2f\n", i + 1, joueurs[i].username, joueurs[i].win_rate);
+        write_client(utilisateur->sock, buffer);
+    }
+
+    if (nbJoueurs < 3) {
+        snprintf(buffer, BUF_SIZE, "Il n'y a pas assez de joueurs pour afficher un top 3 complet.\n");
+        write_client(utilisateur->sock, buffer);
+    }
+}
+
+
 
 
 
@@ -921,6 +1066,8 @@ void mettre_a_jour_statistiques(const char *username, int match_increment, int w
 }
 
 
+
+
 int save_bio_to_file(const char *username, const char *bio)
 {
     char bio_file[150];
@@ -1093,11 +1240,13 @@ void traiter_friendrequest(int idUtilisateur)
     }
 }
 
+
 void traiter_ff(int idUtilisateur)
 {
     Utilisateur *utilisateur = trouverUtilisateurParId(idUtilisateur);
-    if (utilisateur->partieEnCours == NULL || utilisateur->estEnJeu != 1)
-    {
+    
+    if (utilisateur->partieEnCours == NULL || utilisateur->estEnJeu != 1) {
+
         write_client(utilisateur->sock, "Erreur : Vous n'êtes pas en jeu.\n");
         return;
     }
@@ -1110,9 +1259,11 @@ void traiter_ff(int idUtilisateur)
     write_client(adversaire->sock, "Votre adversaire a abandonné la partie. Victoire enregistrée.\n");
 
     // Notifier les spectateurs
+
     for (int i = 0; i < salon->nbSpectateurs; i++)
     {
         Utilisateur *spectateur = trouverUtilisateurParId(salon->spectateurs[i]);
+
         char buffer[BUF_SIZE];
         snprintf(buffer, BUF_SIZE, "Le joueur %s a abandonné la partie. Le joueur %s est déclaré vainqueur.\n",
                  utilisateur->username, adversaire->username);
@@ -1121,7 +1272,12 @@ void traiter_ff(int idUtilisateur)
 
     // Mettre à jour les statistiques
     mettre_a_jour_statistiques(utilisateur->username, 1, 0, 1); // Défaite pour l'utilisateur
-    mettre_a_jour_statistiques(adversaire->username, 1, 1, 0); // Victoire pour l'adversaire
+    mettre_a_jour_statistiques(adversaire->username, 1, 1, 0);  // Victoire pour l'adversaire
+
+    // Sauvegarder la partie
+    char resultat[256];
+    snprintf(resultat, sizeof(resultat), "Le joueur %s a abandonné. Victoire de %s.", utilisateur->username, adversaire->username);
+    sauvegarderPartie(&salon->partie, salon->joueur1->username, salon->joueur2->username, resultat);
 
     // Réinitialiser l'état des joueurs et du salon
     utilisateur->estEnJeu = 0;
@@ -1131,7 +1287,9 @@ void traiter_ff(int idUtilisateur)
     salon->statut = 2; // Partie terminée
 }
 
+
 void ajouter_spectateur_salon(int idSalon, int idSpectateur)
+
 {
     Salon *salon = trouverSalonParId(idSalon);
     Utilisateur *spectateur = trouverUtilisateurParId(idSpectateur);
@@ -1148,8 +1306,10 @@ void ajouter_spectateur_salon(int idSalon, int idSpectateur)
 void traiter_watch(int idSpectateur, const char *search_username)
 {
     // Trouver l'utilisateur à observer
+
     Utilisateur *spectateur = trouverUtilisateurParId(idSpectateur);
-    printf("pseudo du joueur que je voeux regarer : %s\n",search_username);
+    printf("pseudo du joueur que je veux regarder : %s\n",search_username);
+
     Utilisateur *joueur = trouverUtilisateurParUsername(search_username);
 
     if (joueur == NULL)
@@ -1586,6 +1746,11 @@ void traiterMessage(int idUtilisateur, char *message)
         {
             traiter_unwatch(idUtilisateur);
         }
+        else if (strcmp(message, "/leaderboard") == 0) {
+            afficherClassementTop3(utilisateur);
+            
+        }
+
 
         else
         {
