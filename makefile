@@ -52,6 +52,7 @@ database: $(UTILISATEURS_FILE) $(PLAYERS_DIR)
 	@echo "Création des dossiers pour les utilisateurs..."
 	@while IFS=, read -r id username password; do \
 	    mkdir -p $(PLAYERS_DIR)/$$username; \
+		mkdir -p $(PLAYERS_DIR)/$$username/games; \
 	    echo "Bio de $$username" > $(PLAYERS_DIR)/$$username/bio; \
 	    echo "Deuxième ligne de bio pour $$username" >> $(PLAYERS_DIR)/$$username/bio; \
 	    touch $(PLAYERS_DIR)/$$username/friends; \
@@ -82,6 +83,11 @@ database: $(UTILISATEURS_FILE) $(PLAYERS_DIR)
 	@if [ -f $(PLAYERS_DIR)/statistics ]; then \
 	    rm -f $(PLAYERS_DIR)/statistics; \
 	fi
+		@if [ -d $(PLAYERS_DIR)/games ]; then \
+	    rm -rf $(PLAYERS_DIR)/games; \
+	fi
+
+	
 	@echo "Les utilisateurs et dossiers ont été créés avec succès."
 
 

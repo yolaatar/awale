@@ -325,8 +325,8 @@ void terminerPartie(int idSalon)
 void sauvegarderPartie(Partie *partie, const char *username1, const char *username2, const char *resultat) {
     // Dossiers des deux joueurs
     char filepath1[256], filepath2[256];
-    snprintf(filepath1, sizeof(filepath1), "Serveur/players/%s/%s_vs_%s.txt", username1, username1, username2);
-    snprintf(filepath2, sizeof(filepath2), "Serveur/players/%s/%s_vs_%s.txt", username2, username1, username2);
+    snprintf(filepath1, sizeof(filepath1), "Serveur/players/%s/games/%s_vs_%s.txt", username1, username1, username2);
+    snprintf(filepath2, sizeof(filepath2), "Serveur/players/%s/games/%s_vs_%s.txt", username2, username1, username2);
 
     FILE *file1 = fopen(filepath1, "w");
     FILE *file2 = fopen(filepath2, "w");
@@ -361,6 +361,68 @@ void sauvegarderPartie(Partie *partie, const char *username1, const char *userna
     fclose(file2);
 }
 
+void traiter_historique(int idUtilisateur) {
+    Utilisateur *utilisateur = trouverUtilisateurParId(idUtilisateur);
+
+    // Construire le chemin vers le dossier "games"
+    char games_dir[150];
+    snprintf(games_dir, sizeof(games_dir), "Serveur/players/%s/games", utilisateur->username);
+
+    // Commande pour lister les fichiers du dossier "games"
+    char command[200];
+    snprintf(command, sizeof(command), "ls %s > temp_file_list.txt 2>/dev/null", games_dir);
+    system(command);
+
+    // Ouvrir le fichier temporaire contenant la liste des fichiers
+    FILE *temp_file = fopen("temp_file_list.txt", "r");
+    if (!temp_file) {
+        write_client(utilisateur->sock, "Erreur lors de la lecture de l'historique.\n");
+        return;
+    }
+
+    char buffer[BUF_SIZE];
+    snprintf(buffer, BUF_SIZE, "Historique de vos parties :\n");
+
+    char line[256];
+    int has_games = 0;
+    while (fgets(line, sizeof(line), temp_file)) {
+        has_games = 1;
+
+        // Supprimer la nouvelle ligne en fin de fichier
+        line[strcspn(line, "\r\n")] = '\0';
+
+        // Construire le chemin vers le fichier de partie
+        char file_path[256];
+        snprintf(file_path, sizeof(file_path), "%s/%s", games_dir, line);
+
+        // Ouvrir le fichier de la partie
+        FILE *game_file = fopen(file_path, "r");
+        if (!game_file) {
+            snprintf(buffer + strlen(buffer), BUF_SIZE - strlen(buffer),
+                     "Impossible de lire %s.\n", line);
+            continue;
+        }
+
+
+        char game_line[256];
+        while (fgets(game_line, sizeof(game_line), game_file)) {
+            snprintf(buffer + strlen(buffer), BUF_SIZE - strlen(buffer), "%s", game_line);
+        }
+
+        strncat(buffer, "\n", BUF_SIZE - strlen(buffer) - 1);
+        fclose(game_file);
+    }
+
+    fclose(temp_file);
+    remove("temp_file_list.txt"); // Nettoyage du fichier temporaire
+
+    if (!has_games) {
+        write_client(utilisateur->sock, "Vous n'avez pas fait de partie.\n");
+    } else {
+        write_client(utilisateur->sock, buffer);
+    }
+}
+
 
 
 void envoyerAide(int idUtilisateur) {
@@ -388,6 +450,8 @@ void envoyerAide(int idUtilisateur) {
     write_client(utilisateur->sock, "/bio - Modifier votre bio.\n");
     write_client(utilisateur->sock, "/msg [username] [message] - Envoyer un message privé.\n");
     write_client(utilisateur->sock, "/leaderboard : Afficher le top 3 des joueurs en fonction de leur winrate.\n");
+    write_client(utilisateur->sock, "/historique : Voir l'historique des parties jouées.\n");
+    
     
 }
 
@@ -643,6 +707,16 @@ int ajouter_utilisateur(const char *username, const char *password)
     {
         perror("Erreur lors de la création du fichier statistiques");
     }
+
+        // Création du sous-dossier pour stocker les games
+    char games_dir[150];
+    snprintf(games_dir, sizeof(games_dir), "%s/games", user_dir);
+    if (mkdir(games_dir, 0777) != 0)
+    {
+        perror("Erreur lors de la création du dossier games");
+        return -1;
+    }
+
 
 
     return 1; // Inscription réussie
@@ -1773,6 +1847,10 @@ void traiterMessage(int idUtilisateur, char *message)
                 write_client(utilisateur->sock, "Format incorrect. Utilisez : /watchgame [ID salon]\n");
             }
         }
+        else if (strcmp(message, "/historique") == 0) {
+            traiter_historique(utilisateur->id);
+        }
+
 
 
 

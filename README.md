@@ -91,6 +91,7 @@ Le fichier Makefile inclut plusieurs règles pour faciliter la compilation et la
    - `/watch [username]` : Regarder la partie d'un utilisateur.
    - `/unwatch` : Arreter de regarder la partie d'un utilisateur.
    - `/leaderboard` : Afficher le top 3 des joueurs en fonction de leur winrate. 
+   - `/historique` : Voir l'historique des parties jouées.
    - `/public` : Passer en mode public pour envoyer des messages visibles par tous.
    - `/private` : Passer en mode privé (fonctionnalité à développer ou préciser).
    - `/logout` : Se déconnecter du serveur.
