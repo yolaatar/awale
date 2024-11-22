@@ -1313,6 +1313,37 @@ void traiter_watch(int idSpectateur, const char *search_username)
     ajouter_spectateur_salon(joueur->idPartieEnCours, idSpectateur);
 }
 
+void traiter_watch_game(int idSpectateur, int salonId)
+{
+    Utilisateur *spectateur = trouverUtilisateurParId(idSpectateur);
+
+    // Vérifie si l'utilisateur est valide
+    if (!spectateur)
+    {
+        write_client(spectateur->sock, "Erreur : Utilisateur introuvable.\n");
+        return;
+    }
+
+    // Recherche du salon par ID
+    Salon *salon = trouverSalonParId(salonId);
+    if (!salon)
+    {
+        write_client(spectateur->sock, "Erreur : Salon introuvable.\n");
+        return;
+    }
+
+    // Vérification de l'état du salon
+    if (salon->statut != 1)
+    {
+        write_client(spectateur->sock, "Erreur : La partie demandée n'est pas en cours.\n");
+        return;
+    }
+
+    // Utilise traiter_watch pour rejoindre la partie en observant le joueur 1
+    traiter_watch(idSpectateur, salon->joueur1->username);
+}
+
+
 void startMatchmakingGame() {
     if (queueSize >= 2) {
         Utilisateur *player1 = trouverUtilisateurParId(queue[0]);
@@ -1729,6 +1760,21 @@ void traiterMessage(int idUtilisateur, char *message)
             afficherClassementTop3(utilisateur);
             
         }
+        else if (strncmp(message, "/watchgame", 10) == 0)
+        {
+            int salonId = -1; // Par défaut, un ID non valide
+            if (sscanf(message + 11, "%d", &salonId) == 1) // Extraire un ID numérique
+            {
+                traiter_watch_game(idUtilisateur, salonId);
+            }
+            else
+            {
+                Utilisateur *utilisateur = trouverUtilisateurParId(idUtilisateur);
+                write_client(utilisateur->sock, "Format incorrect. Utilisez : /watchgame [ID salon]\n");
+            }
+        }
+
+
 
 
         else
