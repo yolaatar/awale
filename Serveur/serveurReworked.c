@@ -79,6 +79,9 @@ int nbSalons = 0;
 
 void mettre_a_jour_statistiques(const char *username, int match_increment, int win_increment, int loss_increment);
 void envoyer_plateau_spectateur(Utilisateur *spectateur, Salon *salon);
+void sauvegarderPartie(Partie *partie, const char *username1, const char *username2, const char *resultat);
+void lire_statistiques(const char *username, int *matches, int *wins, int *losses);
+
 
 
 void initialiserUtilisateurs(void)
