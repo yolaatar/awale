@@ -27,6 +27,12 @@ typedef struct
     int nbSpectateurs;
 } Salon;
 
+typedef struct {
+    char username[50];
+    float win_rate;
+} JoueurClassement;
+
+
 
 struct Utilisateur
 {
@@ -374,6 +380,8 @@ void envoyerAide(Utilisateur *utilisateur) {
     write_client(utilisateur->sock, "/friendrequest - Voir vos demandes d'amis en attente.\n");
     write_client(utilisateur->sock, "/bio - Modifier votre bio.\n");
     write_client(utilisateur->sock, "/msg [username] [message] - Envoyer un message privé.\n");
+    write_client(utilisateur->sock, "/leaderboard : Afficher le top 3 des joueurs en fonction de leur winrate.\n");
+    
 }
 
 
@@ -689,6 +697,65 @@ void traiter_logout(Utilisateur *utilisateur)
     utilisateur->sock = INVALID_SOCKET;
 }
 
+void afficherClassementTop3(Utilisateur *utilisateur) {
+    JoueurClassement joueurs[MAX_CLIENTS];
+    int nbJoueurs = 0;
+
+    // Chemin du fichier des utilisateurs
+    char user_file[] = "Serveur/utilisateurs.txt";
+
+    FILE *file = fopen(user_file, "r");
+    if (!file) {
+        perror("Erreur lors de l'ouverture du fichier utilisateurs.txt");
+        write_client(utilisateur->sock, "Erreur : Impossible d'accéder aux informations des utilisateurs.\n");
+        return;
+    }
+
+    char line[256];
+    while (fgets(line, sizeof(line), file)) {
+        char username[50];
+        if (sscanf(line, "%*d,%49[^,],%*s", username) == 1) {
+            int matches = 0, wins = 0, losses = 0;
+            lire_statistiques(username, &matches, &wins, &losses);
+
+            if (matches > 0) {
+                float win_rate = (float)wins / matches;
+                strncpy(joueurs[nbJoueurs].username, username, sizeof(joueurs[nbJoueurs].username) - 1);
+                joueurs[nbJoueurs].win_rate = win_rate;
+                nbJoueurs++;
+            }
+        }
+    }
+    fclose(file);
+
+    // Trier les joueurs par win_rate décroissant
+    for (int i = 0; i < nbJoueurs - 1; i++) {
+        for (int j = i + 1; j < nbJoueurs; j++) {
+            if (joueurs[j].win_rate > joueurs[i].win_rate) {
+                JoueurClassement temp = joueurs[i];
+                joueurs[i] = joueurs[j];
+                joueurs[j] = temp;
+            }
+        }
+    }
+
+    // Envoyer le classement au client
+    char buffer[BUF_SIZE];
+    snprintf(buffer, BUF_SIZE, "Classement global des meilleurs joueurs (Top 3) :\n");
+    write_client(utilisateur->sock, buffer);
+
+    for (int i = 0; i < nbJoueurs && i < 3; i++) {
+        snprintf(buffer, BUF_SIZE, "%d. %s - Ratio de victoires : %.2f\n", i + 1, joueurs[i].username, joueurs[i].win_rate);
+        write_client(utilisateur->sock, buffer);
+    }
+
+    if (nbJoueurs < 3) {
+        snprintf(buffer, BUF_SIZE, "Il n'y a pas assez de joueurs pour afficher un top 3 complet.\n");
+        write_client(utilisateur->sock, buffer);
+    }
+}
+
+
 
 
 
@@ -938,6 +1005,8 @@ void mettre_a_jour_statistiques(const char *username, int match_increment, int w
 }
 
 
+
+
 int save_bio_to_file(const char *username, const char *bio)
 {
     char bio_file[150];
@@ -1159,7 +1228,7 @@ void ajouter_spectateur_salon(Salon *salon, Utilisateur *spectateur)
 void traiter_watch(Utilisateur *spectateur, const char *search_username)
 {
     // Trouver l'utilisateur à observer
-    printf("pseudo du joueur que je voeux regarer : %s\n",search_username);
+    printf("pseudo du joueur que je veux regarder : %s\n",search_username);
     Utilisateur *joueur = trouverUtilisateurParUsername(search_username);
 
     if (joueur == NULL)
@@ -1585,6 +1654,11 @@ void traiterMessage(Utilisateur *utilisateur, char *message)
         {
             traiter_unwatch(utilisateur);
         }
+        else if (strcmp(message, "/leaderboard") == 0) {
+            afficherClassementTop3(utilisateur);
+            
+        }
+
 
         else
         {
