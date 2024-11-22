@@ -87,9 +87,10 @@ Le fichier Makefile inclut plusieurs règles pour faciliter la compilation et la
    - `/faccept [username]` : Accepter une demande d'ami.
    - `/fdecline [username]` : Refuser une demande d'ami.
    - `/bio` : Modifier votre bio (biographie personnelle).
+   - `/savebio` : Enregistrer votre bio.
    - `/watch [username]` : Regarder la partie d'un utilisateur.
    - `/unwatch` : Arreter de regarder la partie d'un utilisateur.
-   - `/savebio` : Enregistrer votre bio.
+   - `/leaderboard` : Afficher le top 3 des joueurs en fonction de leur winrate. 
    - `/public` : Passer en mode public pour envoyer des messages visibles par tous.
    - `/private` : Passer en mode privé (fonctionnalité à développer ou préciser).
    - `/logout` : Se déconnecter du serveur.

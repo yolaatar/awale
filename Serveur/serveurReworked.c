@@ -15,36 +15,13 @@
 // Déclaration anticipée de Utilisateur
 typedef struct Utilisateur Utilisateur;
 
-typedef struct
-{
-    Utilisateur *joueur1;
-    Utilisateur *joueur2;
-    Partie partie;
-    int tourActuel; // 0 pour joueur1, 1 pour joueur2
-    int statut;     // 0 pour attente, 1 pour en cours, 2 pour terminé
-    Utilisateur *spectateurs[MAX_SPECTATEURS];
-    int nbSpectateurs;
-} Salon;
 
 typedef struct {
     char username[50];
     float win_rate;
 } JoueurClassement;
 
-struct Utilisateur
-{
-    SOCKET sock;
-    int id;
-    char pseudo[20];
-    char username[50];
-    char password[50];
-    int estPublic;        // 1 si l'utilisateur est public, 0 s'il est privé
-    int estEnJeu;         // 1 si en jeu, 0 si il ne l'est pas et 2 si il a déjà lancé un défi
-    int isConnected;      // 1 si connecté, 0 sinon
-    Salon *partieEnCours; // NULL si le joueur n'est pas en jeu
-    Joueur *joueur;       // Pointeur vers le joueur (Joueur1 ou Joueur2) dans une partie
-    Utilisateur *challenger;
-};
+
 
 static void init(void)
 {
@@ -69,12 +46,14 @@ static void end(void)
 
 int queue[MAX_QUEUE];
 int queueSize = 0;
-Salon salons[MAX_SALONS];
+// Salon salons[MAX_SALONS];
 Utilisateur utilisateurs[MAX_CLIENTS];
 int nbUtilisateursConnectes = 0;
 int nbSalons = 0;
 static int nextUserId = 1; 
 static int nextSalonId = 1;
+Salon salons[MAX_SALONS];
+
 
 void mettre_a_jour_statistiques(const char *username, int match_increment, int win_increment, int loss_increment);
 void envoyer_plateau_spectateur(int idSpectateur, int idSalon);

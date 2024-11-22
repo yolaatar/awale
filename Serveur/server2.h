@@ -74,6 +74,7 @@ struct Utilisateur {
     int idchallenger;
 };
 
+
 // Variables globales supplémentaires
 extern int queue[MAX_QUEUE];
 extern int queueSize;
