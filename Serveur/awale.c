@@ -29,11 +29,6 @@ int initialiserPartie(Partie *partie) {
         partie->plateau.cases[i].nbGraines = 4;
     }
 
-    // Plateau plateauTest = {
-    // .cases = {{4}, {4}, {4}, {4}, {4}, {1}, {1}, {4}, {4}, {4}, {4}, {0}}
-    // };
-    // partie->plateau = plateauTest;
-
     snprintf(partie->joueur1.pseudo, sizeof(partie->joueur1.pseudo), "%s", partie->joueur1.pseudo);
     snprintf(partie->joueur2.pseudo, sizeof(partie->joueur2.pseudo), "%s", partie->joueur2.pseudo);
 
@@ -256,46 +251,3 @@ int verifierFinPartie(Partie *partie) {
     return 0; // La partie peut continuer
 }
 
-
-// int main() {
-//     Partie partie;
-//     int partieEnCours = 1, tour = 1, caseJouee;
-
-//     initialiserPartie(&partie);
-
-//     while (partieEnCours) {
-//         afficherPlateau(&partie);
-//         int joueur = tour % 2 == 1 ? 1 : 2;
-//         printf("Tour %d, joueur %d (%s). Choisissez une case à jouer (1-6 pour J1, 7-12 pour J2): ", tour, joueur, joueur == 1 ? partie.joueur1.pseudo : partie.joueur2.pseudo);
-//         scanf("%d", &caseJouee);
-
-//         //condition pour terminer la partie dans le terminal 
-//         if (caseJouee == -1) {
-//             printf("Partie annulée.\n");
-//             partieEnCours = 0;
-//             break;
-//         }
-//         // Ajuste l'index pour correspondre aux indices du tableau (0-11 au lieu de 1-12)
-//         caseJouee -= 1;
-//         if (jouerCoup(&partie, caseJouee, joueur) == 0) {
-//             if (verifierFinPartie(&partie)) {
-//                 partieEnCours = 0;
-//                 printf("\nFin de la partie !\n");
-//                 afficherPlateau(&partie);
-//                 if (partie.joueur1.score > partie.joueur2.score) printf("Le gagnant est %s !\n", partie.joueur1.pseudo);
-//                 else if (partie.joueur1.score < partie.joueur2.score) printf("Le gagnant est %s !\n", partie.joueur2.pseudo);
-//                 else printf("Match nul !\n");
-//             }
-//             tour++;
-//         } else {
-//             //On vérifie si l'adversaire est en famine
-//             if(joueur == 1 && nombreGrainesRestantesJoueur(&partie, 2) == 0) {
-//                 printf("Le joueur 2 est en famine, vous devez le nourrir.\n");
-//             } else if(joueur == 2 && nombreGrainesRestantesJoueur(&partie, 1) == 0) {
-//                 printf("Le joueur 1 est en famine, vous devez le nourrir.\n");
-//             } else
-//             printf("Coup illégal, essayez encore.\n");
-//         }
-//     }
-//     return 0;
-// }
