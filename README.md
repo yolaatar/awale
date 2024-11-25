@@ -78,6 +78,9 @@ Le fichier Makefile inclut plusieurs règles pour faciliter la compilation et la
    - `/decline` : Refuser un défi.
    - `/play [case]` : Jouer un coup pendant une partie.
    - `/ff` : Abandonner la partie.
+   - `/queueup` : Permet de rejoindre la file de matchmaking.
+   - `/leavequeue` : Permet de quitter la file de matchmaking.
+   - `/listepartie` : Affiche les parties en cours.
    - `/list` : Afficher la liste des joueurs connectés.
    - `/search [username]` : Rechercher les informations d'un joueur (bio et statistiques).
    - `/profile` : Afficher vos propres informations (profil).
@@ -89,6 +92,7 @@ Le fichier Makefile inclut plusieurs règles pour faciliter la compilation et la
    - `/bio` : Modifier votre bio (biographie personnelle).
    - `/savebio` : Enregistrer votre bio.
    - `/watch [username]` : Regarder la partie d'un utilisateur.
+   - `/watchgame [id]` : Observer une partie par ID.
    - `/unwatch` : Arreter de regarder la partie d'un utilisateur.
    - `/leaderboard` : Afficher le top 3 des joueurs en fonction de leur winrate. 
    - `/historique` : Voir l'historique des parties jouées.
