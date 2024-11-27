@@ -1,0 +1,4 @@
+Partie entre yolaatar et chaouki
+Coups joués :
+Joueur 1 joue case 1
+Résultat : Le joueur chaouki a abandonné. Victoire de yolaatar.

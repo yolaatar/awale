@@ -94,7 +94,17 @@ static void write_client(SOCKET sock, const char *buffer);
 static void send_message_to_all_clients(Client *clients, int actual, const char *buffer, char from_server, const char *sender_name);
 static void remove_client(Client *clients, int to_remove, int *actual);
 static void clear_clients(Client *clients, int actual);
-
+int est_deja_connecte(const char *username);
+int verifier_identifiants(const char *username, const char *password);
+int ajouter_utilisateur(const char *username, const char *password);
+int supprimer_ligne_fichier(const char *username, const char *filename, const char *line_to_remove);
+int ajouter_ligne_fichier(const char *username, const char *filename, const char *line);
+int supprimer_ligne_fichier(const char *username, const char *filename, const char *line_to_remove);
+int save_bio_to_file(const char *username, const char *bio);
+int verifier_username(const char *username);
+void get_user_bio(const char *username, char *bio, size_t bio_size);
+void lire_relations(const char *friend_file, const char *prefix, char *output, size_t output_size);
+void ajouter_spectateur_salon(int idSalon, int idSpectateur);
 Utilisateur *trouverUtilisateurParId(int idjoueur);
 Salon *trouverSalonParId(int idSalon);
 void initialiserUtilisateurs(void);
